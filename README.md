@@ -5,6 +5,7 @@ A cross-platform Minecraft launcher written in Java with Russian and English int
 
 Works on Windows, Linux, and macOS. Builds into a single executable JAR with no external dependencies.
 
+NOTICE: Some WMs may require _JAVA_AWT_WM_NONREPARENTING=1 argument 
 ---
 
 ## Features
