@@ -6,7 +6,7 @@
 
     <groupId>by.agro</groupId>
     <artifactId>agro-launcher</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
 
     <name>AgroLauncher</name>
     <description>Fast, customizable, lightweight Minecraft launcher that supports Forge/Fabric/Quilt/NeoForge/OptiFine, Modrinth and Ely.by</description>
