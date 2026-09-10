@@ -4,10 +4,14 @@ import by.agro.launcher.LauncherContext;
 import by.agro.launcher.auth.Account;
 import by.agro.launcher.core.ProgressListener;
 import by.agro.launcher.core.SystemInfo;
+import by.agro.launcher.diagnostics.DiagnosticExporter;
+import by.agro.launcher.diagnostics.DiagnosticFinding;
+import by.agro.launcher.diagnostics.DiagnosticReport;
 import by.agro.launcher.launch.GameProcess;
 import by.agro.launcher.loaders.LoaderInstaller;
 import by.agro.launcher.loaders.LoaderType;
 import by.agro.launcher.mods.ModBuildManager;
+import by.agro.launcher.repair.RepairService;
 import by.agro.launcher.ui.components.GameConsole;
 import by.agro.launcher.ui.components.UiFactory;
 import by.agro.launcher.i18n.Strings;
@@ -17,7 +21,9 @@ import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.SwingUtilities;
@@ -39,12 +45,17 @@ public final class PlayPanel extends JPanel {
     private final JLabel ramLabel = new JLabel();
     private final JLabel loaderLabel = new JLabel();
     private final JButton playButton = UiFactory.primaryButton(Strings.get("play.button"));
+    private final JButton repairButton = UiFactory.primaryButton(Strings.get("repair.button"));
     private final JButton stopButton = UiFactory.dangerButton(Strings.get("play.stop"));
+    private final JButton exportButton = UiFactory.linkButton("Export analysis");
     private final JProgressBar progressBar = new JProgressBar();
     private final JLabel progressLabel = new JLabel(" ");
     private final GameConsole console = new GameConsole();
 
     private volatile GameProcess runningProcess;
+    private volatile GameProcess lastProcess;
+    private volatile DiagnosticReport lastReport;
+    private volatile boolean repairRunning;
 
     public PlayPanel(LauncherContext context, Consumer<String> statusReporter) {
         this.context = context;
@@ -120,12 +131,16 @@ public final class PlayPanel extends JPanel {
         playButton.setFont(AgroTheme.boldFont(17));
         playButton.addActionListener(e -> launchGame());
 
+        repairButton.setPreferredSize(new Dimension(190, 52));
+        repairButton.addActionListener(e -> repairInstallation());
+
         stopButton.setVisible(false);
         stopButton.addActionListener(e -> stopGame());
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         buttons.setOpaque(false);
         buttons.add(playButton);
+        buttons.add(repairButton);
         buttons.add(stopButton);
 
         progressBar.setStringPainted(false);
@@ -159,6 +174,9 @@ public final class PlayPanel extends JPanel {
 
         JPanel tools = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         tools.setOpaque(false);
+        exportButton.setEnabled(false);
+        exportButton.addActionListener(e -> exportDiagnosticReport());
+        tools.add(exportButton);
         JButton clearButton = UiFactory.linkButton(Strings.get("play.clear"));
         clearButton.addActionListener(e -> console.clear());
         tools.add(clearButton);
@@ -187,8 +205,9 @@ public final class PlayPanel extends JPanel {
 
             ramLabel.setText(SystemInfo.formatMb(context.settings().maxRamMb));
 
-            boolean ready = version != null && !version.isBlank() && account != null;
-            playButton.setEnabled(ready && runningProcess == null);
+            boolean versionReady = version != null && !version.isBlank();
+            playButton.setEnabled(versionReady && account != null && runningProcess == null);
+            repairButton.setEnabled(versionReady && runningProcess == null && !repairRunning);
         });
     }
 
@@ -269,6 +288,7 @@ public final class PlayPanel extends JPanel {
                 progressBar.setIndeterminate(false);
                 try {
                     runningProcess = get();
+                    lastProcess = runningProcess;
                     stopButton.setVisible(true);
                     progressLabel.setText(Strings.get("play.startedPid", runningProcess.pid()));
                     console.appendLauncherMessage(Strings.get("play.started"));
@@ -288,6 +308,110 @@ public final class PlayPanel extends JPanel {
         }.execute();
     }
 
+    private void repairInstallation() {
+        String mcVersion = context.settings().selectedVersion;
+        if (repairRunning || runningProcess != null || mcVersion == null || mcVersion.isBlank()) {
+            return;
+        }
+        LoaderType loaderType = LoaderType.fromId(context.settings().selectedLoader);
+        String confirmation = Strings.get("repair.confirm", mcVersion, loaderType.displayName());
+        if (JOptionPane.showConfirmDialog(this, confirmation, Strings.get("repair.title"),
+                JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        repairRunning = true;
+        playButton.setEnabled(false);
+        repairButton.setEnabled(false);
+        progressBar.setVisible(true);
+        progressBar.setIndeterminate(true);
+        progressLabel.setText(Strings.get("repair.starting"));
+        console.appendLauncherMessage("Восстановление запущено: Minecraft " + mcVersion
+                + ", loader " + loaderType.displayName()
+                + (context.settings().selectedLoaderVersion == null
+                || context.settings().selectedLoaderVersion.isBlank()
+                ? " (рекомендуемая версия)" : " " + context.settings().selectedLoaderVersion));
+
+        ProgressListener listener = new ProgressListener() {
+            @Override
+            public void onProgress(String stage, long current, long total, String detail) {
+                SwingUtilities.invokeLater(() -> {
+                    progressLabel.setText(stage + (detail == null || detail.isBlank() ? "" : " — " + detail));
+                    if (total > 0) {
+                        progressBar.setIndeterminate(false);
+                        progressBar.setMaximum((int) Math.min(total, Integer.MAX_VALUE));
+                        progressBar.setValue((int) Math.min(current, Integer.MAX_VALUE));
+                    } else {
+                        progressBar.setIndeterminate(true);
+                    }
+                });
+            }
+
+            @Override
+            public void onMessage(String message) {
+                console.appendLauncherMessage(message);
+                SwingUtilities.invokeLater(() -> progressLabel.setText(message));
+            }
+        };
+
+        new SwingWorker<RepairService.Result, Void>() {
+            @Override
+            protected RepairService.Result doInBackground() throws Exception {
+                ModBuildManager buildManager = new ModBuildManager(context.paths());
+                ModBuildManager.ModBuild activeBuild = buildManager.list().stream()
+                        .filter(build -> build.id.equals(context.settings().selectedModBuildId))
+                        .findFirst().orElse(null);
+                RepairService.Request request = new RepairService.Request();
+                request.minecraftVersion = mcVersion;
+                request.loaderType = loaderType;
+                request.loaderVersion = context.settings().selectedLoaderVersion;
+                request.loaderInstaller = context.installer(loaderType);
+                request.manifest = context.manifest();
+                request.gameDir = activeBuild == null
+                        ? context.paths().gameDir() : buildManager.gameDir(activeBuild);
+                return context.repairService().repair(request, listener);
+            }
+
+            @Override
+            protected void done() {
+                repairRunning = false;
+                progressBar.setVisible(false);
+                progressBar.setIndeterminate(false);
+                try {
+                    RepairService.Result result = get();
+                    String message = Strings.get("repair.success", result.managedMods);
+                    progressLabel.setText(message);
+                    console.appendLauncherMessage("Восстановление завершено: профиль " + result.versionId
+                            + ", управляемых модов обработано: " + result.managedMods);
+                    report(message);
+                    JOptionPane.showMessageDialog(PlayPanel.this, message,
+                            Strings.get("repair.title"), JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    String detail = cause.getMessage() != null ? cause.getMessage() : cause.toString();
+                    String message = Strings.get("repair.error", detail);
+                    progressLabel.setText(message);
+                    console.appendLauncherMessage("ОШИБКА восстановления: " + detail);
+                    appendRepairStackTrace(cause);
+                    report(message);
+                    JOptionPane.showMessageDialog(PlayPanel.this, message,
+                            Strings.get("common.error"), JOptionPane.ERROR_MESSAGE);
+                } finally {
+                    refresh();
+                }
+            }
+        }.execute();
+    }
+
+    private void appendRepairStackTrace(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            console.append(current == error ? current.toString() : "Caused by: " + current);
+            for (StackTraceElement element : current.getStackTrace()) {
+                console.append("\tat " + element);
+            }
+        }
+    }
+
     private String installLoaderIfNeeded(String mcVersion, ProgressListener listener) throws Exception {
         LoaderType loaderType = LoaderType.fromId(context.settings().selectedLoader);
         if (loaderType == LoaderType.VANILLA) {
@@ -305,7 +429,18 @@ public final class PlayPanel extends JPanel {
     }
 
     private void onGameExit(int exitCode) {
+        GameProcess completed = lastProcess;
         runningProcess = null;
+        if (completed != null) {
+            lastReport = completed.diagnosticReport();
+            exportButton.setEnabled(lastReport != null);
+            if (lastReport != null && !lastReport.findings.isEmpty()) {
+                console.appendLauncherMessage("Диагностика:");
+                for (DiagnosticFinding finding : lastReport.findings) {
+                    console.appendLauncherMessage(finding.toString());
+                }
+            }
+        }
         stopButton.setVisible(false);
         playButton.setEnabled(true);
         progressLabel.setText(Strings.get("play.exited", exitCode));
@@ -316,6 +451,42 @@ public final class PlayPanel extends JPanel {
         if (window != null && !window.isVisible()) {
             window.setVisible(true);
         }
+    }
+
+    private void exportDiagnosticReport() {
+        DiagnosticReport report = lastReport;
+        if (report == null) return;
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Analysis export");
+        chooser.setSelectedFile(new java.io.File("agrolauncher-diagnostic.txt"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        java.nio.file.Path destination = chooser.getSelectedFile().toPath();
+        exportButton.setEnabled(false);
+        new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                if (destination.getFileName().toString().toLowerCase().endsWith(".json")) {
+                    DiagnosticExporter.exportJson(report, destination);
+                } else {
+                    DiagnosticExporter.exportTxt(report, destination);
+                }
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                exportButton.setEnabled(true);
+                try {
+                    get();
+                    console.appendLauncherMessage("Analysis exported.");
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    JOptionPane.showMessageDialog(PlayPanel.this,
+                            "Could not export analysis: " + cause.getMessage(),
+                            "Export error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
     }
 
     private void stopGame() {

@@ -68,7 +68,7 @@ public final class ElyByAuth {
             account.username = Json.string(profile, "name", login);
         } else {
             throw new AuthException("IllegalArgumentException",
-                    "Сервер не вернул профиль игрока. Проверьте, привязан ли ник к аккаунту Ely.by.");
+                    "The server did not return a player profile. Check whether a username is linked to the Ely.by account.");
         }
         account.id = "elyby-" + account.uuid;
         return account;
@@ -79,7 +79,7 @@ public final class ElyByAuth {
         if (account.accessToken == null || account.accessToken.isBlank()
                 || account.clientToken == null || account.clientToken.isBlank()) {
             throw new AuthException("IllegalArgumentException",
-                    "Недостаточно данных для обновления токена — требуется повторный вход");
+                    "Insufficient data to refresh the token; sign in again");
         }
 
         JsonObject request = new JsonObject();
@@ -186,7 +186,7 @@ public final class ElyByAuth {
 
     private static AuthException buildError(int code, String body) {
         String errorType = "UnknownError";
-        String message = "Ошибка авторизации (HTTP " + code + ")";
+        String message = "Authentication error (HTTP " + code + ")";
 
         if (body != null && !body.isBlank()) {
             try {
@@ -210,19 +210,19 @@ public final class ElyByAuth {
     private static String translate(String serverMessage) {
         String lower = serverMessage.toLowerCase();
         if (lower.contains("two factor")) {
-            return "Аккаунт защищён двухфакторной аутентификацией — введите код из приложения";
+            return "This account is protected by two-factor authentication; enter the code from your authenticator app";
         }
         if (lower.contains("invalid credentials")) {
-            return "Неверный логин или пароль";
+            return "Invalid username or password";
         }
         if (lower.contains("token") && lower.contains("invalid")) {
-            return "Токен недействителен — требуется повторный вход";
+            return "The token is invalid; sign in again";
         }
         if (lower.contains("account is not activated")) {
-            return "Аккаунт не активирован — подтвердите e-mail на ely.by";
+            return "The account is not activated; confirm your email address on ely.by";
         }
         if (lower.contains("banned") || lower.contains("blocked")) {
-            return "Аккаунт заблокирован";
+            return "The account is blocked";
         }
         return serverMessage;
     }

@@ -5,6 +5,7 @@ import by.agro.launcher.core.HashUtil;
 import by.agro.launcher.core.Json;
 import by.agro.launcher.core.LauncherPaths;
 import by.agro.launcher.core.ProgressListener;
+import by.agro.launcher.core.SecureFiles;
 import by.agro.launcher.jvm.JavaManager;
 import by.agro.launcher.version.RemoteVersion;
 import by.agro.launcher.version.VersionManifest;
@@ -87,11 +88,22 @@ public class ForgeInstaller implements LoaderInstaller {
     @Override
     public String install(String minecraftVersion, String loaderVersion, ProgressListener listener)
             throws IOException {
+        return installInternal(minecraftVersion, loaderVersion, listener, false);
+    }
+
+    @Override
+    public String forceInstall(String minecraftVersion, String loaderVersion, ProgressListener listener)
+            throws IOException {
+        return installInternal(minecraftVersion, loaderVersion, listener, true);
+    }
+
+    private String installInternal(String minecraftVersion, String loaderVersion,
+                                   ProgressListener listener, boolean force) throws IOException {
         String forgeVersion = loaderVersion;
         if (forgeVersion == null || forgeVersion.isBlank()) {
             List<LoaderVersion> versions = availableVersions(minecraftVersion);
             if (versions.isEmpty()) {
-                throw new IOException("Forge не найден для Minecraft " + minecraftVersion);
+                throw new IOException("Forge was not found for Minecraft " + minecraftVersion);
             }
             forgeVersion = versions.get(0).version;
         }
@@ -99,11 +111,24 @@ public class ForgeInstaller implements LoaderInstaller {
         String fullVersion = buildFullVersion(minecraftVersion, forgeVersion);
         listener.onMessage(type().displayName() + " " + fullVersion);
 
+        if (!force) {
+            String installed = validatedInstalledProfile(minecraftVersion, forgeVersion, fullVersion, listener);
+            if (installed != null) {
+                listener.onMessage("Установка не требуется: проверен профиль " + installed);
+                return installed;
+            }
+            listener.onMessage("Установка требуется: marker отсутствует или профиль неполон");
+        } else {
+            listener.onMessage("Принудительная переустановка запрошена Repair");
+        }
+
         Path installer = paths.installersDir()
                 .resolve(type().id() + "-" + fullVersion + "-installer.jar");
         String installerUrl = installerUrl(fullVersion);
         listener.onProgress("Установка " + type().displayName(), 0, 3, "загрузка установщика");
-        downloader.download(installerUrl, installer);
+        String installerSha1 = fetchInstallerSha1(installerUrl);
+        downloader.downloadVerified(installerUrl, installer, "SHA-1", installerSha1,
+                256L * 1024 * 1024);
 
         Path gameDir = paths.gameDir();
         Files.createDirectories(gameDir);
@@ -125,17 +150,91 @@ public class ForgeInstaller implements LoaderInstaller {
         listener.onProgress("Установка " + type().displayName(), 2, 3, "поиск профиля");
         String versionId = findInstalledProfile(minecraftVersion, forgeVersion);
         if (versionId == null) {
-            throw new IOException("Установщик " + type().displayName()
-                    + " завершился, но профиль версии не найден в " + paths.versionsDir());
+            throw new IOException(type().displayName() + " installer completed, but no version profile was found in "
+                    + paths.versionsDir());
         }
 
+        writeInstallState(minecraftVersion, forgeVersion, fullVersion, versionId);
         listener.onProgress("Установка " + type().displayName(), 3, 3, versionId);
-        listener.onMessage("Профиль установлен: " + versionId);
+        listener.onMessage("Профиль установлен и проверен: " + versionId);
         return versionId;
+    }
+
+    private String validatedInstalledProfile(String minecraftVersion, String loaderVersion,
+                                             String fullVersion, ProgressListener listener) {
+        Path marker = installStatePath(fullVersion);
+        if (!Files.isRegularFile(marker)) {
+            return null;
+        }
+        try {
+            JsonObject state = Json.readObject(marker);
+            if (!type().id().equals(Json.string(state, "loaderType", null))
+                    || !minecraftVersion.equals(Json.string(state, "minecraftVersion", null))
+                    || !loaderVersion.equals(Json.string(state, "loaderVersion", null))) {
+                return null;
+            }
+            String versionId = Json.string(state, "versionId", null);
+            if (versionId == null || !Files.isRegularFile(paths.versionJson(versionId))) {
+                return null;
+            }
+            JsonObject profile = Json.readObject(paths.versionJson(versionId));
+            if (!versionId.equals(Json.string(profile, "id", null))
+                    || Json.string(profile, "mainClass", null) == null) {
+                return null;
+            }
+            String inherited = Json.string(profile, "inheritsFrom", null);
+            if (inherited != null && !Files.isRegularFile(paths.versionJson(inherited))) {
+                return null;
+            }
+            listener.onMessage("Generated profile выбран: " + versionId);
+            return versionId;
+        } catch (IOException | RuntimeException e) {
+            listener.onMessage("Marker установки недействителен: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private void writeInstallState(String minecraftVersion, String loaderVersion,
+                                   String fullVersion, String versionId) throws IOException {
+        Path profile = paths.versionJson(versionId);
+        if (!Files.isRegularFile(profile)) {
+            throw new IOException("Generated profile is missing: " + profile);
+        }
+        JsonObject parsed = Json.readObject(profile);
+        if (Json.string(parsed, "mainClass", null) == null) {
+            throw new IOException("Generated profile has no mainClass: " + profile);
+        }
+        JsonObject state = new JsonObject();
+        state.addProperty("format", 1);
+        state.addProperty("loaderType", type().id());
+        state.addProperty("loaderVersion", loaderVersion);
+        state.addProperty("minecraftVersion", minecraftVersion);
+        state.addProperty("versionId", versionId);
+        state.addProperty("profileSize", Files.size(profile));
+        Path marker = installStatePath(fullVersion);
+        Path temporary = SecureFiles.createSiblingTemp(marker, ".json");
+        try {
+            Json.write(temporary, state);
+            SecureFiles.atomicReplace(temporary, marker);
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private Path installStatePath(String fullVersion) {
+        return paths.installersDir().resolve(type().id() + "-" + fullVersion + ".installed.json");
     }
 
     protected String installerUrl(String fullVersion) {
         return MAVEN_BASE + fullVersion + "/forge-" + fullVersion + "-installer.jar";
+    }
+
+    protected String fetchInstallerSha1(String installerUrl) throws IOException {
+        String checksum = downloader.getString(installerUrl + ".sha1").trim();
+        if (!checksum.matches("(?i)[0-9a-f]{40}")) {
+            throw new IOException("Repository did not provide a valid SHA-1 for installer: " + installerUrl);
+        }
+        return checksum;
     }
 
     protected String buildFullVersion(String minecraftVersion, String forgeVersion) {
@@ -286,23 +385,23 @@ public class ForgeInstaller implements LoaderInstaller {
         try {
             if (!process.waitFor(INSTALL_TIMEOUT_MINUTES, TimeUnit.MINUTES)) {
                 process.destroyForcibly();
-                throw new IOException("Установщик " + type().displayName() + " превысил лимит времени");
+                throw new IOException(type().displayName() + " installer timed out");
             }
             exitCode = process.exitValue();
         } catch (InterruptedException e) {
             process.destroyForcibly();
             Thread.currentThread().interrupt();
-            throw new IOException("Установка прервана", e);
+            throw new IOException("Installation interrupted", e);
         }
 
         if (exitCode != 0) {
             String output = tail.toString();
             if (output.contains("invalid outputs")) {
-                throw new ProcessorMismatchException("Установщик " + type().displayName()
-                        + " собрал файлы с неверными хешами");
+                throw new ProcessorMismatchException(type().displayName()
+                        + " installer produced files with incorrect hashes");
             }
-            throw new IOException("Установщик " + type().displayName()
-                    + " завершился с кодом " + exitCode + ". Вывод:\n" + output);
+            throw new IOException(type().displayName()
+                    + " installer exited with code " + exitCode + ". Output:\n" + output);
         }
     }
 

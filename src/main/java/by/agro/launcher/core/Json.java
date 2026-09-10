@@ -12,6 +12,7 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 
 public final class Json {
@@ -45,12 +46,16 @@ public final class Json {
     }
 
     public static void write(Path file, Object value) throws IOException {
-        Path parent = file.toAbsolutePath().getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
-        try (Writer writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
-            GSON.toJson(value, writer);
+        Path absoluteFile = file.toAbsolutePath().normalize();
+        Path temp = SecureFiles.createSiblingTemp(absoluteFile, ".tmp");
+        try {
+            try (Writer writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING)) {
+                GSON.toJson(value, writer);
+            }
+            SecureFiles.atomicReplace(temp, absoluteFile);
+        } finally {
+            Files.deleteIfExists(temp);
         }
     }
 

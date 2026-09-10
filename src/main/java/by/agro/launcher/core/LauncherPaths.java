@@ -1,9 +1,13 @@
 package by.agro.launcher.core;
 
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 
 
 public final class LauncherPaths {
@@ -17,7 +21,32 @@ public final class LauncherPaths {
     private static LauncherPaths instance;
 
     private LauncherPaths(Path root) {
-        this.root = root;
+        this.root = root.toAbsolutePath().normalize();
+    }
+
+    public static LauncherPaths forRoot(Path root) {
+        if (root == null) {
+            throw new IllegalArgumentException("Root directory is not specified");
+        }
+        return new LauncherPaths(root);
+    }
+
+    private static String safePathSegment(String value, String description) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(description + " is not specified");
+        }
+        Path path;
+        try {
+            path = Paths.get(value);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Invalid " + description + ": " + value, e);
+        }
+        if (path.isAbsolute() || path.getNameCount() != 1
+                || ".".equals(value) || "..".equals(value)
+                || value.indexOf('/') >= 0 || value.indexOf('\\') >= 0) {
+            throw new IllegalArgumentException("Unsafe " + description + ": " + value);
+        }
+        return value;
     }
 
     public static synchronized LauncherPaths get() {
@@ -72,22 +101,47 @@ public final class LauncherPaths {
 
 
     private static void copyRecursively(Path source, Path target) throws IOException {
-        try (var stream = Files.walk(source)) {
-            for (Path path : stream.toList()) {
-                Path relative = source.relativize(path);
-                Path destination = target.resolve(relative.toString());
-                if (Files.isDirectory(path)) {
-                    Files.createDirectories(destination);
-                } else {
-                    Path parent = destination.getParent();
-                    if (parent != null) {
-                        Files.createDirectories(parent);
-                    }
-                    Files.copy(path, destination,
-                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
+        Path sourceRoot = source.toAbsolutePath().normalize();
+        Path targetRoot = target.toAbsolutePath().normalize();
+        SecureFiles.rejectSymlinkParents(sourceRoot);
+        SecureFiles.rejectSymlinkParents(targetRoot);
+        SecureFiles.rejectSymbolicLink(sourceRoot, "Migration source");
+        if (Files.exists(targetRoot, LinkOption.NOFOLLOW_LINKS)) {
+            SecureFiles.rejectSymbolicLink(targetRoot, "Migration destination");
         }
+        Files.walkFileTree(sourceRoot, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                if (attrs.isSymbolicLink() || Files.isSymbolicLink(dir)) {
+                    throw new IOException("Symbolic links are not allowed during migration: " + dir);
+                }
+                Path destination = targetRoot.resolve(sourceRoot.relativize(dir)).normalize();
+                if (!destination.startsWith(targetRoot)) {
+                    throw new IOException("Migration path escapes destination: " + destination);
+                }
+                SecureFiles.rejectSymlinkParents(destination);
+                Files.createDirectories(destination);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                if (attrs.isSymbolicLink() || !attrs.isRegularFile() || Files.isSymbolicLink(file)) {
+                    throw new IOException("Only regular files may be migrated: " + file);
+                }
+                Path destination = targetRoot.resolve(sourceRoot.relativize(file)).normalize();
+                if (!destination.startsWith(targetRoot)) {
+                    throw new IOException("Migration path escapes destination: " + destination);
+                }
+                SecureFiles.rejectSymlinkParents(destination);
+                if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
+                    SecureFiles.rejectSymbolicLink(destination, "Migration destination");
+                }
+                Files.copy(file, destination, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        LinkOption.NOFOLLOW_LINKS);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
 
@@ -131,15 +185,17 @@ public final class LauncherPaths {
     }
 
     public Path versionDir(String versionId) {
-        return versionsDir().resolve(versionId);
+        return versionsDir().resolve(safePathSegment(versionId, "version ID"));
     }
 
     public Path versionJson(String versionId) {
-        return versionDir(versionId).resolve(versionId + ".json");
+        String safeVersionId = safePathSegment(versionId, "version ID");
+        return versionDir(safeVersionId).resolve(safeVersionId + ".json");
     }
 
     public Path versionJar(String versionId) {
-        return versionDir(versionId).resolve(versionId + ".jar");
+        String safeVersionId = safePathSegment(versionId, "version ID");
+        return versionDir(safeVersionId).resolve(safeVersionId + ".jar");
     }
 
     public Path librariesDir() {
@@ -160,7 +216,7 @@ public final class LauncherPaths {
 
 
     public Path assetsVirtualDir(String assetIndexId) {
-        return assetsDir().resolve("virtual").resolve(assetIndexId);
+        return assetsDir().resolve("virtual").resolve(safePathSegment(assetIndexId, "asset index ID"));
     }
 
     public Path nativesDir(String versionId) {
@@ -173,7 +229,7 @@ public final class LauncherPaths {
 
 
     public Path profileModsDir(String profileId) {
-        return instancesDir().resolve(profileId).resolve("mods");
+        return instancesDir().resolve(safePathSegment(profileId, "profile ID")).resolve("mods");
     }
 
     public Path instancesDir() {
@@ -181,7 +237,7 @@ public final class LauncherPaths {
     }
 
     public Path instanceDir(String profileId) {
-        return instancesDir().resolve(profileId);
+        return instancesDir().resolve(safePathSegment(profileId, "profile ID"));
     }
 
 
@@ -215,6 +271,10 @@ public final class LauncherPaths {
 
     public Path cacheDir() {
         return root.resolve("cache");
+    }
+
+    public Path versionManifestCacheFile() {
+        return cacheDir().resolve("version_manifest_v2.json");
     }
 
     public Path logsDir() {
@@ -256,14 +316,16 @@ public final class LauncherPaths {
             coords = coords.substring(0, at);
         }
 
-        String[] parts = coords.split(":");
-        if (parts.length < 3) {
-            throw new IllegalArgumentException("Некорректные maven-координаты: " + mavenCoords);
+        String[] parts = coords.split(":", -1);
+        if (parts.length < 3 || parts.length > 4) {
+            throw new IllegalArgumentException("Invalid Maven coordinates: " + mavenCoords);
         }
-        String group = parts[0].replace('.', '/');
-        String artifact = parts[1];
-        String version = parts[2];
-        String classifier = parts.length > 3 ? parts[3] : null;
+        String groupId = safeMavenPart(parts[0], "groupId", true);
+        String artifact = safeMavenPart(parts[1], "artifactId", false);
+        String version = safeMavenPart(parts[2], "version", false);
+        String classifier = parts.length > 3 ? safeMavenPart(parts[3], "classifier", false) : null;
+        extension = safeMavenPart(extension, "extension", false);
+        String group = groupId.replace('.', '/');
 
         StringBuilder fileName = new StringBuilder(artifact).append('-').append(version);
         if (classifier != null && !classifier.isEmpty()) {
@@ -272,5 +334,17 @@ public final class LauncherPaths {
         fileName.append('.').append(extension);
 
         return group + "/" + artifact + "/" + version + "/" + fileName;
+    }
+
+    private static String safeMavenPart(String value, String description, boolean allowDots) {
+        if (value == null || value.isBlank() || value.contains("..")
+                || value.indexOf('/') >= 0 || value.indexOf('\\') >= 0) {
+            throw new IllegalArgumentException("Unsafe " + description + ": " + value);
+        }
+        String pattern = allowDots ? "[A-Za-z0-9_.-]+" : "[A-Za-z0-9_-]+";
+        if (!value.matches(pattern)) {
+            throw new IllegalArgumentException("Invalid " + description + ": " + value);
+        }
+        return value;
     }
 }

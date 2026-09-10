@@ -13,10 +13,12 @@ import by.agro.launcher.loaders.LoaderType;
 import by.agro.launcher.loaders.NeoForgeInstaller;
 import by.agro.launcher.loaders.OptiFineInstaller;
 import by.agro.launcher.loaders.QuiltInstaller;
+import by.agro.launcher.repair.RepairService;
 import by.agro.launcher.version.VersionManifest;
 import by.agro.launcher.version.VersionResolver;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.EnumMap;
 import java.util.Map;
 
@@ -30,6 +32,7 @@ public final class LauncherContext {
     private final JavaManager javaManager;
     private final GameLauncher gameLauncher;
     private final VersionResolver versionResolver;
+    private final RepairService repairService;
     private final Map<LoaderType, LoaderInstaller> installers = new EnumMap<>(LoaderType.class);
 
     private volatile VersionManifest manifest;
@@ -48,6 +51,7 @@ public final class LauncherContext {
         this.javaManager = new JavaManager(paths, downloader, settings);
         this.gameLauncher = new GameLauncher(paths, downloader, settings, javaManager);
         this.versionResolver = gameLauncher.resolver();
+        this.repairService = new RepairService(paths, downloader);
 
         installers.put(LoaderType.FABRIC, new FabricInstaller(paths, downloader));
         installers.put(LoaderType.QUILT, new QuiltInstaller(paths, downloader));
@@ -84,6 +88,10 @@ public final class LauncherContext {
         return versionResolver;
     }
 
+    public RepairService repairService() {
+        return repairService;
+    }
+
     public LoaderInstaller installer(LoaderType type) {
         return installers.get(type);
     }
@@ -99,7 +107,8 @@ public final class LauncherContext {
             synchronized (this) {
                 local = manifest;
                 if (local == null) {
-                    local = VersionManifest.fetch(downloader);
+                    local = VersionManifest.fetchCached(downloader, paths.versionManifestCacheFile(),
+                            Duration.ofHours(6), settings.offlineMode);
                     manifest = local;
                 }
             }
@@ -115,7 +124,11 @@ public final class LauncherContext {
 
     public VersionManifest reloadManifest() throws IOException {
         synchronized (this) {
-            manifest = VersionManifest.fetch(downloader);
+            if (settings.offlineMode) {
+                throw new IOException("Refreshing the version manifest requires a network connection; offline mode is active");
+            }
+            manifest = VersionManifest.fetchCached(downloader, paths.versionManifestCacheFile(),
+                    Duration.ZERO, false);
             return manifest;
         }
     }

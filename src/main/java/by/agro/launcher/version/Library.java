@@ -12,32 +12,24 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Библиотека из version.json.
- *
- * Поддерживает три формата, встречающиеся в реальных манифестах:
- *  1. Современный (1.19+): natives как отдельная библиотека с classifier в name и rules по ОС.
- *  2. Legacy (1.7–1.12): блок "natives" с шаблоном ${arch} и downloads.classifiers.
- *  3. Maven-only (Fabric/Quilt/Forge): только name + url репозитория, без downloads.
- */
+
 public final class Library {
 
     public final String name;
     public final List<Rule> rules;
 
-    /** downloads.artifact */
+
     public final Artifact artifact;
 
-    /** downloads.classifiers: имя classifier → артефакт */
+ 
     public final Map<String, Artifact> classifiers;
 
-    /** natives: ОС → шаблон classifier (например "natives-windows-${arch}") */
+
     public final Map<String, String> natives;
 
-    /** Базовый URL maven-репозитория (Fabric/Forge/Quilt), если downloads отсутствует. */
+ 
     public final String mavenUrl;
 
-    /** extract.exclude — какие пути не распаковывать из нативного архива. */
     public final List<String> extractExclude;
 
     public Library(String name, List<Rule> rules, Artifact artifact, Map<String, Artifact> classifiers,
@@ -51,7 +43,7 @@ public final class Library {
         this.extractExclude = extractExclude;
     }
 
-    /** Один скачиваемый файл. */
+
     public static final class Artifact {
         public final String path;
         public final String url;
@@ -133,15 +125,10 @@ public final class Library {
         return Rule.allowed(rules, featureSet);
     }
 
-    /** Является ли библиотека нативной (legacy-формат с блоком natives). */
     public boolean hasLegacyNatives() {
         return !natives.isEmpty();
     }
 
-    /**
-     * Является ли библиотека нативной в современном формате —
-     * classifier "natives-*" прямо в maven-координатах.
-     */
     public boolean isModernNative() {
         String[] parts = name.split(":");
         return parts.length > 3 && parts[3].startsWith("natives");
@@ -151,7 +138,7 @@ public final class Library {
         return hasLegacyNatives() || isModernNative();
     }
 
-    /** Возвращает classifier нативной библиотеки для текущей ОС (legacy-формат), либо null. */
+ 
     public String currentNativeClassifier() {
         if (natives.isEmpty()) {
             return null;
@@ -164,10 +151,7 @@ public final class Library {
         return template.replace("${arch}", arch);
     }
 
-    /**
-     * Артефакт, который нужно скачать для текущей платформы.
-     * Для legacy-нативов берётся classifier, для остальных — artifact.
-     */
+  
     public Artifact resolveArtifact() {
         String nativeClassifier = currentNativeClassifier();
         if (nativeClassifier != null) {
@@ -175,7 +159,7 @@ public final class Library {
             if (fromClassifier != null) {
                 return fromClassifier;
             }
-            // некоторые манифесты Forge не содержат classifiers — соберём путь из координат
+            
             return syntheticArtifact(nativeClassifier);
         }
         if (artifact != null) {
@@ -184,10 +168,7 @@ public final class Library {
         return syntheticArtifact(null);
     }
 
-    /**
-     * Собирает артефакт из maven-координат, когда в манифесте нет блока downloads
-     * (характерно для Fabric, Quilt, Forge, NeoForge).
-     */
+ 
     private Artifact syntheticArtifact(String extraClassifier) {
         String coords = name;
         if (extraClassifier != null && !extraClassifier.isEmpty()) {
@@ -203,7 +184,7 @@ public final class Library {
         return new Artifact(relative, base + relative, null, 0);
     }
 
-    /** Относительный путь внутри каталога libraries. */
+
     public String relativePath() {
         Artifact resolved = resolveArtifact();
         if (resolved != null && resolved.path != null && !resolved.path.isBlank()) {
@@ -212,7 +193,6 @@ public final class Library {
         return LauncherPaths.mavenToRelativePath(name);
     }
 
-    /** group:artifact — ключ для дедупликации версий одной библиотеки. */
     public String groupArtifactKey() {
         String[] parts = name.split(":");
         if (parts.length >= 2) {

@@ -13,11 +13,7 @@ import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
-/**
- * Правило применимости библиотеки или аргумента (блок "rules").
- *
- * Формат: { "action": "allow"|"disallow", "os": {...}, "features": {...} }
- */
+
 public final class Rule {
 
     public final boolean allow;
@@ -74,10 +70,10 @@ public final class Rule {
         return new Rule(allow, osName, osArch, osVersion, features);
     }
 
-    /** Совпадает ли условие правила с текущим окружением. */
+
     private boolean matches(FeatureSet featureSet) {
         if (osName != null) {
-            // "osx-arm64" встречается в некоторых сторонних манифестах
+            
             String current = Platform.current().mojangName();
             if (!osName.equals(current)) {
                 return false;
@@ -85,7 +81,7 @@ public final class Rule {
         }
         if (osArch != null) {
             String arch = Platform.arch();
-            // Mojang использует "x86" для 32-бит; сверяем напрямую и с сырым os.arch
+            
             String raw = System.getProperty("os.arch", "").toLowerCase();
             if (!osArch.equals(arch) && !osArch.equals(raw)) {
                 return false;
@@ -98,7 +94,7 @@ public final class Rule {
                     return false;
                 }
             } catch (PatternSyntaxException e) {
-                // некорректный regex не должен ломать запуск
+                
                 return false;
             }
         }
@@ -113,11 +109,6 @@ public final class Rule {
         return true;
     }
 
-    /**
-     * Вычисляет итоговую применимость по списку правил.
-     * Логика Mojang: если список пуст — разрешено. Иначе действует последнее совпавшее правило,
-     * а при отсутствии совпадений — запрещено.
-     */
     public static boolean allowed(List<Rule> rules, FeatureSet featureSet) {
         if (rules == null || rules.isEmpty()) {
             return true;
@@ -131,7 +122,7 @@ public final class Rule {
         return result;
     }
 
-    /** Набор включённых "features" (например, is_demo_user, has_custom_resolution). */
+
     public interface FeatureSet {
         boolean isEnabled(String feature);
     }

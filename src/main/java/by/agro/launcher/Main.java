@@ -5,6 +5,7 @@ import by.agro.launcher.core.LauncherPaths;
 import by.agro.launcher.core.Platform;
 import by.agro.launcher.core.ProgressListener;
 import by.agro.launcher.core.Settings;
+import by.agro.launcher.diagnostics.Redactor;
 import by.agro.launcher.i18n.Language;
 import by.agro.launcher.i18n.Strings;
 import by.agro.launcher.ui.MainWindow;
@@ -76,6 +77,7 @@ public final class Main {
                 LauncherContext context = new LauncherContext(settings);
                 MainWindow window = new MainWindow(context);
                 window.setVisible(true);
+                window.applyInitialWindowOpacity();
             } catch (Exception e) {
                 e.printStackTrace();
                 JOptionPane.showMessageDialog(null,
@@ -120,7 +122,7 @@ public final class Main {
 
             System.out.println();
             System.out.println("Команда запуска (" + command.size() + " аргументов):");
-            System.out.println(String.join(" ", command));
+            System.out.println(Redactor.renderCommand(command));
         } catch (Exception e) {
             System.err.println("Ошибка: " + e.getMessage());
             e.printStackTrace();

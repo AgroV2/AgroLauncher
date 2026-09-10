@@ -8,10 +8,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Аргумент запуска из блока "arguments" (формат 1.13+).
- * Может быть простой строкой либо объектом с правилами и списком значений.
- */
 public final class Argument {
 
     public final List<String> values;

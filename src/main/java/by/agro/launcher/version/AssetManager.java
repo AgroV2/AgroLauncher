@@ -15,13 +15,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Загрузка ресурсов игры (assets).
- *
- * Современная раскладка: assets/objects/{первые 2 символа хеша}/{хеш}
- * Legacy (1.7.2 и старше, assets = "legacy" или "pre-1.6"):
- *   дополнительно создаётся assets/virtual/{indexId}/{путь}, куда файлы копируются под своими именами.
- */
+
 public final class AssetManager {
 
     private static final String RESOURCES_BASE = "https://resources.download.minecraft.net/";
@@ -34,11 +28,7 @@ public final class AssetManager {
         this.downloader = downloader;
     }
 
-    /**
-     * Скачивает индекс ассетов и все объекты.
-     *
-     * @return путь к каталогу, который нужно передать игре как --assetsDir
-     */
+
     public Path downloadAssets(ResolvedVersion version, ProgressListener listener) throws IOException {
         if (version.assetIndex == null || version.assetIndex.url == null) {
             listener.onMessage("У версии нет индекса ассетов — пропускаем");
@@ -46,7 +36,7 @@ public final class AssetManager {
         }
 
         String indexId = version.assetIndex.id != null ? version.assetIndex.id : version.assetsId;
-        Path indexFile = paths.assetIndexesDir().resolve(indexId + ".json");
+        Path indexFile = paths.assetIndexesDir().resolve(safeFileName(indexId, "index ID") + ".json");
 
         listener.onProgress(Strings.get("progress.assetIndex"), 0, 1, indexId);
         downloader.download(version.assetIndex.url, indexFile, version.assetIndex.sha1);
@@ -88,7 +78,7 @@ public final class AssetManager {
                     : paths.assetsVirtualDir(indexId);
             materializeVirtual(virtualPairs, virtualRoot, listener);
             if (mapToResources) {
-                // pre-1.6 ожидает ресурсы в game_dir/resources, --assetsDir остаётся стандартным
+           
                 return paths.assetsDir();
             }
             return virtualRoot;
@@ -97,7 +87,37 @@ public final class AssetManager {
         return paths.assetsDir();
     }
 
-    /** Копирует объекты в человекочитаемую структуру для legacy-версий. */
+    private static String safeFileName(String value, String description) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(description + " is not specified");
+        }
+        Path path;
+        try {
+            path = Path.of(value);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Invalid " + description, e);
+        }
+        if (path.isAbsolute() || path.getNameCount() != 1
+                || ".".equals(value) || "..".equals(value)
+                || value.indexOf('/') >= 0 || value.indexOf('\\') >= 0) {
+            throw new IllegalArgumentException("Unsafe " + description + ": " + value);
+        }
+        return value;
+    }
+
+    private static Path safeResolve(Path root, String relativePath) throws IOException {
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new IOException("Asset path is empty");
+        }
+        Path normalizedRoot = root.toAbsolutePath().normalize();
+        Path target = normalizedRoot.resolve(relativePath.replace('/', java.io.File.separatorChar)).normalize();
+        if (!target.startsWith(normalizedRoot)) {
+            throw new IOException("Unsafe asset path: " + relativePath);
+        }
+        return target;
+    }
+
+   
     private void materializeVirtual(List<String[]> pairs, Path virtualRoot, ProgressListener listener)
             throws IOException {
         Files.createDirectories(virtualRoot);
@@ -106,7 +126,7 @@ public final class AssetManager {
             String hash = pair[0];
             String assetPath = pair[1];
             Path source = paths.assetObjectsDir().resolve(hash.substring(0, 2)).resolve(hash);
-            Path target = virtualRoot.resolve(assetPath.replace('/', java.io.File.separatorChar));
+            Path target = safeResolve(virtualRoot, assetPath);
             if (!Files.exists(source)) {
                 continue;
             }
@@ -127,7 +147,7 @@ public final class AssetManager {
         listener.onProgress(Strings.get("progress.legacyAssets"), pairs.size(), pairs.size(), Strings.get("progress.done"));
     }
 
-    /** Читает id индекса из локального файла (для случаев без сети). */
+
     public String readIndexId(Path indexFile) throws IOException {
         String content = Files.readString(indexFile, StandardCharsets.UTF_8);
         JsonObject obj = Json.parseObject(content);

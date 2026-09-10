@@ -1,5 +1,8 @@
 package by.agro.launcher.launch;
 
+import by.agro.launcher.diagnostics.DiagnosticReport;
+import by.agro.launcher.diagnostics.LaunchSession;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -13,14 +16,22 @@ public final class GameProcess {
 
     private final Process process;
     private final Thread outputThread;
+    private final LaunchSession session;
 
-    private GameProcess(Process process, Thread outputThread) {
+    private GameProcess(Process process, Thread outputThread, LaunchSession session) {
         this.process = process;
         this.outputThread = outputThread;
+        this.session = session;
     }
 
     public static GameProcess start(List<String> command, Path workingDir,
                                     Consumer<String> onLine, IntConsumer onExit) throws IOException {
+        return start(command, workingDir, onLine, onExit, null);
+    }
+
+    public static GameProcess start(List<String> command, Path workingDir,
+                                    Consumer<String> onLine, IntConsumer onExit,
+                                    LaunchSession session) throws IOException {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workingDir.toFile());
         builder.redirectErrorStream(true);
@@ -32,8 +43,11 @@ public final class GameProcess {
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = in.readLine()) != null) {
+                    if (session != null) {
+                        session.accept(line);
+                    }
                     if (onLine != null) {
-                        onLine.accept(line);
+                        onLine.accept(by.agro.launcher.diagnostics.Redactor.redact(line));
                     }
                 }
             } catch (IOException e) {
@@ -43,6 +57,9 @@ public final class GameProcess {
             } finally {
                 try {
                     int code = process.waitFor();
+                    if (session != null) {
+                        session.finish(code);
+                    }
                     if (onExit != null) {
                         onExit.accept(code);
                     }
@@ -54,7 +71,15 @@ public final class GameProcess {
         reader.setDaemon(true);
         reader.start();
 
-        return new GameProcess(process, reader);
+        return new GameProcess(process, reader, session);
+    }
+
+    public DiagnosticReport diagnosticReport() {
+        return session == null ? null : session.report();
+    }
+
+    public Path sessionLogFile() {
+        return session == null ? null : session.logFile();
     }
 
     public boolean isRunning() {

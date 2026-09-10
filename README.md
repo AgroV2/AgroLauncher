@@ -121,64 +121,26 @@ java -jar AgroLauncher.jar --dry-run 1.21.1 Steve
 
 ---
 
-## Сборка нативного приложения
+## Windows x64 EXE: кросс-сборка на Linux
 
-Готовые скрипты собирают приложение со встроенной Java — на компьютере пользователя ничего устанавливать не нужно.
-
-Нужен **JDK 17 или новее** (именно JDK, не JRE: в нём есть `jpackage`).
-
-### Windows
-
-```cmd
-package-windows.bat
-```
-
-Результат: `build\dist\AgroLauncher\AgroLauncher.exe` — папку можно переносить целиком.
-
-Для установщика понадобится [WiX Toolset v3](https://github.com/wixtoolset/wix3/releases):
-
-```cmd
-package-windows.bat exe
-package-windows.bat msi
-```
-
-### Linux
+Профиль Maven создаёт Windows launcher через Launch4j прямо на Linux, скачивает фиксированный Eclipse Temurin JRE 17 для Windows x64 и кладёт его рядом. Установленная Java на компьютере пользователя не нужна.
 
 ```bash
-chmod +x package-linux.sh
-./package-linux.sh
+cd /home/agrovdva/Загрузки/agro-launcher
+mvn clean verify -Pwindows-portable
 ```
 
-Результат: `build/dist/AgroLauncher/bin/AgroLauncher`.
+Результаты:
 
-Пакеты для установки (нужен `fakeroot` и `binutils` для deb, `rpm-build` для rpm):
+- переносимая папка: `target/AgroLauncher-Windows-x64/`
+- launcher: `target/AgroLauncher-Windows-x64/AgroLauncher.exe`
+- встроенная Java: `target/AgroLauncher-Windows-x64/runtime/bin/java.exe`
+- fat JAR: `target/AgroLauncher-Windows-x64/AgroLauncher.jar`
+- готовый архив: `target/AgroLauncher-Windows-x64-Portable.zip`
 
-```bash
-./package-linux.sh deb
-./package-linux.sh rpm
-```
+Передавайте пользователю всю папку либо ZIP. Это не один самодостаточный EXE: `AgroLauncher.exe` использует соседние `AgroLauncher.jar` и `runtime/`. Профиль не использует `jpackage`, Windows или WiX.
 
-### Один файл .exe со встроенной Java
-
-`jpackage` выдаёт папку или установщик, но не единый переносимый файл. Чтобы получить именно один `.exe`, приложение упаковывается в самораспаковывающийся архив:
-
-```cmd
-package-windows-single-exe.bat
-```
-
-Дополнительно нужен [7-Zip](https://www.7-zip.org) — из него берётся модуль `7z.sfx`.
-
-Результат: `build\dist\AgroLauncher.exe`, около 22 МБ. При запуске распаковывается во временную папку и открывает лаунчер; Java внутри.
-
-### Размер сборки
-
-| Вариант | Размер |
-|---|---|
-| JAR (нужна установленная Java) | ~2,6 МБ |
-| Нативное приложение со встроенной Java (папка) | ~95 МБ |
-| Один файл .exe (самораспаковывающийся) | ~22 МБ |
-
-Проверено на практике: app-image собирается и запускается, набор модулей урезан с 166 МБ до 95 МБ через `--add-modules`.
+Обычная Linux/JAR-сборка остаётся доступна командой `mvn clean package`.
 
 ---
 

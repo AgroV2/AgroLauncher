@@ -52,12 +52,15 @@ public final class AppearancePanel extends JPanel {
     private final JSlider blurRadiusSlider;
     private final JSlider dimSlider;
     private final JSlider opacitySlider;
+    private final JSlider windowOpacitySlider;
     private final JLabel backgroundStatusLabel = new JLabel(" ");
     private final JLabel blurRadiusValue = new JLabel();
     private final JLabel dimValue = new JLabel();
     private final JLabel opacityValue = new JLabel();
+    private final JLabel windowOpacityValue = new JLabel();
 
     private final Timer applyDebounce;
+    private final Timer opacitySaveDebounce;
 
     public AppearancePanel(LauncherContext context, BackgroundManager backgroundManager,
                            Consumer<String> statusReporter, Runnable onAppearanceChanged) {
@@ -72,9 +75,12 @@ public final class AppearancePanel extends JPanel {
         this.blurRadiusSlider = new JSlider(1, 40, settings.backgroundBlurRadius);
         this.dimSlider = new JSlider(0, 90, settings.backgroundDimPercent);
         this.opacitySlider = new JSlider(40, 100, settings.panelOpacityPercent);
+        this.windowOpacitySlider = new JSlider(20, 100, settings.windowOpacityPercent);
 
         applyDebounce = new Timer(220, e -> applyBackgroundSettings());
         applyDebounce.setRepeats(false);
+        opacitySaveDebounce = new Timer(250, e -> context.settings().save());
+        opacitySaveDebounce.setRepeats(false);
 
         setOpaque(false);
         setLayout(new BorderLayout());
@@ -297,6 +303,9 @@ public final class AppearancePanel extends JPanel {
         body.add(buildSliderRow(Strings.get("appearance.dim"), dimSlider, dimValue, " %"));
         body.add(UiFactory.verticalGap(10));
         body.add(buildSliderRow(Strings.get("appearance.panelOpacity"), opacitySlider, opacityValue, " %"));
+        body.add(UiFactory.verticalGap(10));
+        body.add(buildSliderRow(Strings.get("appearance.windowOpacity"),
+                windowOpacitySlider, windowOpacityValue, " %"));
 
         card.add(body, BorderLayout.CENTER);
         return card;
@@ -315,8 +324,18 @@ public final class AppearancePanel extends JPanel {
         slider.setPreferredSize(new Dimension(260, 28));
         slider.addChangeListener(e -> {
             valueLabel.setText(slider.getValue() + suffix);
-            if (!slider.getValueIsAdjusting()) {
-                saveSliderValues();
+            updateSliderValuesInMemory();
+            if (slider == windowOpacitySlider) {
+                
+                notifyChanged();
+                if (slider.getValueIsAdjusting()) {
+                    opacitySaveDebounce.restart();
+                } else {
+                    opacitySaveDebounce.stop();
+                    context.settings().save();
+                }
+            } else if (!slider.getValueIsAdjusting()) {
+                context.settings().save();
                 applyDebounce.restart();
             }
         });
@@ -332,12 +351,12 @@ public final class AppearancePanel extends JPanel {
         return row;
     }
 
-    private void saveSliderValues() {
+    private void updateSliderValuesInMemory() {
         var settings = context.settings();
         settings.backgroundBlurRadius = blurRadiusSlider.getValue();
         settings.backgroundDimPercent = dimSlider.getValue();
         settings.panelOpacityPercent = opacitySlider.getValue();
-        settings.save();
+        settings.windowOpacityPercent = windowOpacitySlider.getValue();
     }
 
     private void browseForImage() {
@@ -406,6 +425,7 @@ public final class AppearancePanel extends JPanel {
         blurRadiusSlider.setValue(settings.backgroundBlurRadius);
         dimSlider.setValue(settings.backgroundDimPercent);
         opacitySlider.setValue(settings.panelOpacityPercent);
+        windowOpacitySlider.setValue(settings.windowOpacityPercent);
 
         ThemePreset active = ThemePreset.fromId(settings.themePreset);
         updateThemeSelection();

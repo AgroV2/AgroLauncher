@@ -46,6 +46,8 @@ public final class SettingsPanel extends JPanel {
     private final JSpinner minRamSpinner;
     private final JTextField javaPathField = new JTextField();
     private final JCheckBox useManagedJava = new JCheckBox(Strings.get("settings.useManagedJava"));
+    private final JComboBox<String> javaModeCombo = new JComboBox<>(new String[]{"AUTO", "MANAGED", "SYSTEM", "CUSTOM"});
+    private final JCheckBox offlineMode = new JCheckBox("Ограниченный offline mode");
     private final JComboBox<String> javaInstallationsCombo = new JComboBox<>();
     private final JTextField jvmArgsField = new JTextField();
     private final JTextField gameArgsField = new JTextField();
@@ -173,13 +175,22 @@ public final class SettingsPanel extends JPanel {
         JPanel body = UiFactory.transparentPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-        useManagedJava.setOpaque(false);
-        useManagedJava.setFont(AgroTheme.font(13));
-        useManagedJava.setAlignmentX(Component.LEFT_ALIGNMENT);
-        useManagedJava.addActionListener(e -> {
-            context.settings().useManagedJava = useManagedJava.isSelected();
+        useManagedJava.setVisible(false); 
+        javaModeCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        javaModeCombo.addActionListener(e -> {
+            String mode = (String) javaModeCombo.getSelectedItem();
+            if (mode != null) {
+                context.settings().javaMode = mode;
+                context.settings().useManagedJava = "MANAGED".equals(mode);
+                context.settings().save();
+                updateJavaFieldsState();
+            }
+        });
+        offlineMode.setOpaque(false);
+        offlineMode.setAlignmentX(Component.LEFT_ALIGNMENT);
+        offlineMode.addActionListener(e -> {
+            context.settings().offlineMode = offlineMode.isSelected();
             context.settings().save();
-            updateJavaFieldsState();
         });
 
         JLabel hint = UiFactory.hint(Strings.get("settings.javaHint"));
@@ -232,7 +243,11 @@ public final class SettingsPanel extends JPanel {
         JLabel detectedLabel = UiFactory.fieldLabel(Strings.get("settings.javaDetected"));
         detectedLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        body.add(useManagedJava);
+        body.add(UiFactory.fieldLabel("Режим выбора Java"));
+        body.add(UiFactory.verticalGap(4));
+        body.add(javaModeCombo);
+        body.add(UiFactory.verticalGap(6));
+        body.add(offlineMode);
         body.add(UiFactory.verticalGap(2));
         body.add(hint);
         body.add(UiFactory.verticalGap(14));
@@ -413,6 +428,8 @@ public final class SettingsPanel extends JPanel {
         minRamSpinner.setValue(Math.max(0, settings.minRamMb));
         javaPathField.setText(settings.javaPath == null ? "" : settings.javaPath);
         useManagedJava.setSelected(settings.useManagedJava);
+        javaModeCombo.setSelectedItem(settings.javaMode == null || settings.javaMode.isBlank() ? "AUTO" : settings.javaMode);
+        offlineMode.setSelected(settings.offlineMode);
         jvmArgsField.setText(settings.extraJvmArgs == null ? "" : settings.extraJvmArgs);
         gameArgsField.setText(settings.extraGameArgs == null ? "" : settings.extraGameArgs);
         widthSpinner.setValue(settings.windowWidth);
@@ -427,13 +444,17 @@ public final class SettingsPanel extends JPanel {
     }
 
     private void updateJavaFieldsState() {
-        boolean managed = useManagedJava.isSelected();
-        javaPathField.setEnabled(!managed || !context.settings().javaPath.isBlank());
+        boolean custom = "CUSTOM".equals(javaModeCombo.getSelectedItem());
+        javaPathField.setEnabled(custom);
     }
 
     private void saveJavaPath() {
         String path = javaPathField.getText().trim();
         context.settings().javaPath = path;
+        if (!path.isEmpty()) {
+            context.settings().javaMode = "CUSTOM";
+            javaModeCombo.setSelectedItem("CUSTOM");
+        }
         context.settings().save();
         if (!path.isEmpty()) {
             java.nio.file.Path candidate = java.nio.file.Path.of(path);
@@ -480,6 +501,8 @@ public final class SettingsPanel extends JPanel {
         javaPathField.setText(path);
         useManagedJava.setSelected(false);
         context.settings().useManagedJava = false;
+        context.settings().javaMode = "CUSTOM";
+        javaModeCombo.setSelectedItem("CUSTOM");
         saveJavaPath();
     }
 

@@ -13,13 +13,8 @@ import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-/**
- * Распаковка нативных библиотек (.dll / .so / .dylib) в каталог natives версии.
- *
- * Обрабатывает оба формата:
- *  - legacy: библиотека с блоком natives и classifier natives-windows-64
- *  - современный (1.19+): отдельная библиотека с classifier natives-windows в maven-координатах
- */
+
+
 public final class NativesExtractor {
 
     private final LauncherPaths paths;
@@ -28,11 +23,7 @@ public final class NativesExtractor {
         this.paths = paths;
     }
 
-    /**
-     * Распаковывает все нативные библиотеки версии.
-     *
-     * @return каталог natives, который передаётся в -Djava.library.path
-     */
+
     public Path extract(ResolvedVersion version, Rule.FeatureSet featureSet, ProgressListener listener)
             throws IOException {
         Path nativesDir = paths.nativesDir(version.id);
@@ -70,17 +61,17 @@ public final class NativesExtractor {
                 if (isExcluded(name, excludes)) {
                     continue;
                 }
-                // Берём только бинарные библиотеки, служебные файлы не нужны
+                
                 if (!isNativeBinary(name)) {
                     continue;
                 }
-                // Плоская распаковка: имя файла без каталогов
+                
                 String fileName = name.substring(name.lastIndexOf('/') + 1);
                 if (fileName.isEmpty()) {
                     continue;
                 }
                 Path target = targetDir.resolve(fileName);
-                // Защита от path traversal
+                
                 if (!target.normalize().startsWith(targetDir.normalize())) {
                     continue;
                 }
@@ -128,7 +119,7 @@ public final class NativesExtractor {
             perms.add(java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE);
             Files.setPosixFilePermissions(file, perms);
         } catch (IOException | UnsupportedOperationException ignored) {
-            // не критично
+            
         }
     }
 }

@@ -33,36 +33,64 @@ public final class JavaManager {
     }
 
     public String resolveJavaForGame(int requiredMajorVersion, ProgressListener listener) throws IOException {
-        if (settings.javaPath != null && !settings.javaPath.isBlank()) {
-            Path custom = Path.of(settings.javaPath);
-            if (Files.isExecutable(custom)) {
-                return custom.toAbsolutePath().toString();
-            }
-            listener.onMessage("Указанный путь к Java недоступен, ищем альтернативу: " + settings.javaPath);
+        return selectJava(requiredMajorVersion, listener, settings.offlineMode).executableText();
+    }
+
+    public JavaSelection selectJava(int requiredMajorVersion, ProgressListener listener,
+                                    boolean localOnly) throws IOException {
+        int required = JavaRequirement.normalize(requiredMajorVersion);
+        JavaSelection.Mode mode;
+        try {
+            mode = JavaSelection.Mode.valueOf(settings.javaMode == null
+                    ? "AUTO" : settings.javaMode.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            mode = JavaSelection.Mode.AUTO;
         }
 
-        int normalized = JavaRequirement.normalize(requiredMajorVersion);
-
-        if (settings.useManagedJava) {
-            Path managed = managedJavaPath(normalized);
-            if (managed != null) {
-                return managed.toString();
+        if (mode == JavaSelection.Mode.CUSTOM) {
+            if (settings.javaPath == null || settings.javaPath.isBlank()) {
+                throw new IOException("CUSTOM Java mode requires an executable path");
             }
-            listener.onMessage("Требуется Java " + normalized + " — скачиваем среду исполнения");
-            return downloadJre(normalized, listener).toString();
+            return validate(Path.of(settings.javaPath), required, mode, "configured custom runtime");
+        }
+        if (mode == JavaSelection.Mode.SYSTEM) {
+            JavaInstallation system = detectSystemJava();
+            if (system == null) throw new IOException("SYSTEM Java mode could not find a Java executable");
+            return validate(system.executable, required, mode, system.source);
+        }
+
+        Path managed = managedJavaPath(required);
+        if (mode == JavaSelection.Mode.MANAGED) {
+            if (managed == null) {
+                if (localOnly) throw new IOException("Managed Java " + required + " is not installed for offline launch");
+                managed = downloadJre(required, listener);
+            }
+            return validate(managed, required, mode, "managed runtime");
         }
 
         JavaInstallation system = detectSystemJava();
-        if (system != null && system.majorVersion >= normalized) {
-            return system.executable.toString();
+        if (system != null && system.majorVersion >= required) {
+            return validate(system.executable, required, JavaSelection.Mode.SYSTEM, "AUTO selected " + system.source);
         }
-
-        Path managed = managedJavaPath(normalized);
         if (managed != null) {
-            return managed.toString();
+            return validate(managed, required, JavaSelection.Mode.MANAGED, "AUTO selected managed runtime");
         }
-        listener.onMessage("Системная Java не подходит (нужна " + normalized + ") — скачиваем");
-        return downloadJre(normalized, listener).toString();
+        if (localOnly) throw new IOException("No compatible local Java " + required + "+ runtime is available offline");
+        Path downloaded = downloadJre(required, listener);
+        return validate(downloaded, required, JavaSelection.Mode.MANAGED, "AUTO installed managed runtime");
+    }
+
+    private JavaSelection validate(Path executable, int required, JavaSelection.Mode source,
+                                   String reason) throws IOException {
+        if (executable == null || !Files.isExecutable(executable)) {
+            throw new IOException(source + " Java executable is missing or not executable: " + executable);
+        }
+        int detected = JavaDetector.queryMajorVersion(executable);
+        if (detected <= 0) throw new IOException("Could not determine Java major version: " + executable);
+        if (detected < required) {
+            throw new IOException(source + " Java " + detected + " is incompatible; Java " + required + "+ is required");
+        }
+        return new JavaSelection(executable.toAbsolutePath().normalize(), detected, required, source, reason);
     }
 
 
@@ -125,56 +153,60 @@ public final class JavaManager {
         String body = downloader.getString(url);
         JsonArray assets = Json.parse(body).getAsJsonArray();
         if (assets.isEmpty()) {
-            throw new IOException("Adoptium не вернул сборок JRE " + majorVersion
-                    + " для " + Platform.adoptiumOs() + "/" + Platform.adoptiumArch());
+            throw new IOException("Adoptium returned no JRE " + majorVersion + " builds for "
+                    + Platform.adoptiumOs() + "/" + Platform.adoptiumArch());
         }
 
         JsonObject binary = Json.object(assets.get(0).getAsJsonObject(), "binary");
         JsonObject pkg = binary != null ? Json.object(binary, "package") : null;
         if (pkg == null) {
-            throw new IOException("Некорректный ответ Adoptium для JRE " + majorVersion);
+            throw new IOException("Invalid Adoptium response for JRE " + majorVersion);
         }
         String link = Json.string(pkg, "link", null);
         String checksum = Json.string(pkg, "checksum", null);
         String name = Json.string(pkg, "name", "jre-" + majorVersion);
         if (link == null) {
-            throw new IOException("В ответе Adoptium нет ссылки на архив JRE " + majorVersion);
+            throw new IOException("The Adoptium response contains no link to the JRE " + majorVersion + " archive");
+        }
+        if (checksum == null || checksum.isBlank()) {
+            throw new IOException("Adoptium response contains no SHA-256 checksum for JRE " + majorVersion);
         }
 
         Path archive = paths.cacheDir().resolve("runtimes").resolve(name);
         listener.onProgress("Java " + majorVersion, 1, 3, "загрузка " + name);
         Files.createDirectories(archive.getParent());
-        downloader.download(link, archive);
-
-        if (checksum != null && !by.agro.launcher.core.HashUtil.verifySha256(archive, checksum)) {
-            Files.deleteIfExists(archive);
-            throw new IOException("Контрольная сумма архива JRE " + majorVersion + " не совпала");
-        }
+        downloader.downloadVerified(link, archive, "SHA-256", checksum, 512L * 1024 * 1024);
 
         Path target = paths.runtimeDir(majorVersion);
+        Path staging = paths.runtimesDir().resolve(".jre-" + majorVersion + "-" + java.util.UUID.randomUUID() + ".tmp");
+        Path backup = paths.runtimesDir().resolve(".jre-" + majorVersion + ".previous");
         listener.onProgress("Java " + majorVersion, 2, 3, "распаковка");
-        if (Files.exists(target)) {
-            deleteRecursively(target);
-        }
-        Files.createDirectories(target);
-        if (name.endsWith(".zip")) {
-            ArchiveExtractor.unzip(archive, target);
-        } else {
-            ArchiveExtractor.untarGz(archive, target);
-        }
-
-        Path executable = findJavaExecutable(target);
-        if (executable == null) {
-            throw new IOException("После распаковки не найден исполняемый файл java в " + target);
-        }
-        ArchiveExtractor.makeExecutable(executable);
-        Path binDir = executable.getParent();
-        if (binDir != null && Files.isDirectory(binDir)) {
-            try (var stream = Files.list(binDir)) {
-                stream.forEach(ArchiveExtractor::makeExecutable);
+        Files.createDirectories(staging);
+        try {
+            if (name.endsWith(".zip")) ArchiveExtractor.unzip(archive, staging);
+            else ArchiveExtractor.untarGz(archive, staging);
+            Path stagedExecutable = findJavaExecutable(staging);
+            if (stagedExecutable == null) throw new IOException("No Java executable was found after extraction");
+            ArchiveExtractor.makeExecutable(stagedExecutable);
+            int detected = JavaDetector.queryMajorVersion(stagedExecutable);
+            if (detected < majorVersion) {
+                throw new IOException("Downloaded Java " + detected + " does not satisfy required Java " + majorVersion);
             }
+            deleteRecursively(backup);
+            if (Files.exists(target)) Files.move(target, backup, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            try {
+                Files.move(staging, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException switchFailure) {
+                if (Files.exists(backup) && !Files.exists(target)) {
+                    Files.move(backup, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                }
+                throw switchFailure;
+            }
+            deleteRecursively(backup);
+        } finally {
+            deleteRecursively(staging);
         }
-
+        Path executable = findJavaExecutable(target);
         listener.onProgress("Java " + majorVersion, 3, 3, "готово");
         listener.onMessage("Java " + majorVersion + " установлена: " + executable);
         return executable;

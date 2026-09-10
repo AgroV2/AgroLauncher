@@ -2,6 +2,7 @@ package by.agro.launcher.auth;
 
 import by.agro.launcher.core.Json;
 import by.agro.launcher.core.LauncherPaths;
+import by.agro.launcher.core.SecureFiles;
 import com.google.gson.reflect.TypeToken;
 
 import java.io.IOException;
@@ -84,6 +85,7 @@ public final class AccountStorage {
     private void persist() {
         try {
             Json.write(paths.accountsFile(), accounts);
+            SecureFiles.setOwnerOnly(paths.accountsFile());
         } catch (IOException e) {
             System.err.println("Не удалось сохранить аккаунты: " + e.getMessage());
         }

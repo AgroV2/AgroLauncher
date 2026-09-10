@@ -10,6 +10,8 @@ public final class Settings {
     public int minRamMb = 512;
     public String javaPath = "";
     public boolean useManagedJava = true;
+    public String javaMode = "";
+    public boolean offlineMode = false;
     public String extraJvmArgs = "";
     public String extraGameArgs = "";
     public int windowWidth = 854;
@@ -70,6 +72,9 @@ public final class Settings {
     public int panelOpacityPercent = 88;
 
     
+    public int windowOpacityPercent = 100;
+
+    
 
     
     public String modSearchSort = "downloads";
@@ -124,6 +129,17 @@ public final class Settings {
         if (windowHeight < 240) windowHeight = 480;
         if (selectedLoader == null || selectedLoader.isBlank()) selectedLoader = "vanilla";
         if (selectedModBuildId == null) selectedModBuildId = "";
+        if (javaPath == null) javaPath = "";
+        if (javaMode == null || javaMode.isBlank()) {
+            javaMode = !javaPath.isBlank() ? "CUSTOM" : (useManagedJava ? "MANAGED" : "AUTO");
+        }
+        try {
+            by.agro.launcher.jvm.JavaSelection.Mode.valueOf(javaMode.toUpperCase(java.util.Locale.ROOT));
+            javaMode = javaMode.toUpperCase(java.util.Locale.ROOT);
+        } catch (IllegalArgumentException e) {
+            javaMode = "AUTO";
+        }
+        useManagedJava = "MANAGED".equals(javaMode);
 
         
         if (themePreset == null || themePreset.isBlank()) themePreset = "EMERALD_DARK";
@@ -132,6 +148,7 @@ public final class Settings {
         backgroundBlurRadius = clamp(backgroundBlurRadius, 1, 60);
         backgroundDimPercent = clamp(backgroundDimPercent, 0, 90);
         panelOpacityPercent = clamp(panelOpacityPercent, 40, 100);
+        windowOpacityPercent = clamp(windowOpacityPercent, 20, 100);
         if (modSearchSort == null || modSearchSort.isBlank()) modSearchSort = "downloads";
         if (language == null) language = "";
     }

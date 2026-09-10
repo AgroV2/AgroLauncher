@@ -7,17 +7,30 @@
     <groupId>by.agro</groupId>
     <artifactId>agro-launcher</artifactId>
     <version>1.0.0</version>
-    <packaging>jar</packaging>
 
     <name>AgroLauncher</name>
     <description>Fast, customizable, lightweight Minecraft launcher that supports Forge/Fabric/Quilt/NeoForge/OptiFine, Modrinth and Ely.by</description>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <flatlaf.version>3.7.2</flatlaf.version>
-        <gson.version>2.14.0</gson.version>
+        <project.build.outputTimestamp>2026-01-01T00:00:00Z</project.build.outputTimestamp>
+
+        <main.class>by.agro.launcher.Main</main.class>
+
+        <flatlaf.version>3.6</flatlaf.version>
+        <gson.version>2.11.0</gson.version>
+        <junit.version>5.11.4</junit.version>
+
+        <windows.jre.version>17.0.10_7</windows.jre.version>
+        <windows.jre.tag>jdk-17.0.10%2B7</windows.jre.tag>
+        <windows.jre.dir>jdk-17.0.10+7-jre</windows.jre.dir>
+        <windows.jre.sha256>c67cecead5f837a4511619500eca4ad1a2ad452ca377dff910ab3536bd8b1ce9</windows.jre.sha256>
+
+        <windows.jre.archive>OpenJDK17U-jre_x64_windows_hotspot_${windows.jre.version}.zip</windows.jre.archive>
+        <windows.jre.url>https://github.com/adoptium/temurin17-binaries/releases/download/${windows.jre.tag}/${windows.jre.archive}</windows.jre.url>
+        <windows.jre.unpacked>${project.build.directory}/windows-jre-unpacked</windows.jre.unpacked>
+        <windows.dist.directory>${project.build.directory}/AgroLauncher-Windows-x64</windows.dist.directory>
     </properties>
 
     <dependencies>
@@ -36,6 +49,12 @@
             <artifactId>gson</artifactId>
             <version>${gson.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -45,10 +64,8 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
-                <configuration>
-                    <release>17</release>
-                </configuration>
             </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -56,16 +73,21 @@
                 <executions>
                     <execution>
                         <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
+                        <goals><goal>shade</goal></goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>by.agro.launcher.Main</mainClass>
+                                    <manifestEntries>
+                                        <Main-Class>${main.class}</Main-Class>
+                                        <Implementation-Title>${project.name}</Implementation-Title>
+                                        <Implementation-Version>${project.version}</Implementation-Version>
+                                        <Multi-Release>true</Multi-Release>
+                                    </manifestEntries>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>
                             </transformers>
                             <filters>
                                 <filter>
@@ -74,7 +96,9 @@
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
                                         <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
@@ -84,4 +108,133 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>windows-portable</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.googlecode.maven-download-plugin</groupId>
+                        <artifactId>download-maven-plugin</artifactId>
+                        <version>1.9.0</version>
+                        <executions>
+                            <execution>
+                                <id>download-windows-jre</id>
+                                <phase>prepare-package</phase>
+                                <goals><goal>wget</goal></goals>
+                                <configuration>
+                                    <uri>${windows.jre.url}</uri>
+                                    <outputDirectory>${project.build.directory}/downloads</outputDirectory>
+                                    <outputFileName>${windows.jre.archive}</outputFileName>
+                                    <overwrite>false</overwrite>
+                                    <sha256>${windows.jre.sha256}</sha256>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>assemble-windows-runtime</id>
+                                <phase>prepare-package</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <delete dir="${windows.dist.directory}"/>
+                                        <delete dir="${windows.jre.unpacked}"/>
+                                        <mkdir dir="${windows.dist.directory}/runtime"/>
+                                        <unzip src="${project.build.directory}/downloads/${windows.jre.archive}"
+                                               dest="${windows.jre.unpacked}"/>
+                                        <copy todir="${windows.dist.directory}/runtime">
+                                            <fileset dir="${windows.jre.unpacked}/${windows.jre.dir}"/>
+                                        </copy>
+                                    </target>
+                                </configuration>
+                            </execution>
+
+                            <execution>
+                                <id>copy-fat-jar-and-bat</id>
+                                <phase>package</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <copy file="${project.build.directory}/${project.build.finalName}.jar"
+                                              tofile="${windows.dist.directory}/AgroLauncher.jar"/>
+                                        <echo file="${windows.dist.directory}/AgroLauncher.bat" encoding="windows-1251">@echo off${line.separator}start "" "%~dp0runtime\bin\javaw.exe" -jar "%~dp0AgroLauncher.jar" %*${line.separator}</echo>
+                                    </target>
+                                </configuration>
+                            </execution>
+
+                            <execution>
+                                <id>create-portable-zip</id>
+                                <phase>verify</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <zip destfile="${project.build.directory}/AgroLauncher-${project.version}-Windows-x64-Portable.zip"
+                                             basedir="${project.build.directory}"
+                                             includes="AgroLauncher-Windows-x64/**"/>
+                                        <echo message="DONE: ${project.build.directory}/AgroLauncher-${project.version}-Windows-x64-Portable.zip"/>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>com.akathist.maven.plugins.launch4j</groupId>
+                        <artifactId>launch4j-maven-plugin</artifactId>
+                        <version>2.5.2</version>
+                        <executions>
+                            <execution>
+                                <id>create-windows-launcher</id>
+                                <phase>package</phase>
+                                <goals><goal>launch4j</goal></goals>
+                                <configuration>
+                                    <headerType>gui</headerType>
+                                    <outfile>${windows.dist.directory}/AgroLauncher.exe</outfile>
+                                    <jar>AgroLauncher.jar</jar>
+                                    <dontWrapJar>true</dontWrapJar>
+                                    <chdir>.</chdir>
+                                    <errTitle>AgroLauncher</errTitle>
+                                    <stayAlive>false</stayAlive>
+                                    <classPath>
+                                        <mainClass>${main.class}</mainClass>
+                                    </classPath>
+                                    <jre>
+                                        <path>runtime</path>
+                                        <bundledJre64Bit>true</bundledJre64Bit>
+                                        <bundledJreAsFallback>false</bundledJreAsFallback>
+                                        <requiresJdk>false</requiresJdk>
+                                        <requires64Bit>true</requires64Bit>
+                                        <opts>
+                                            <opt>-Xms256m</opt>
+                                            <opt>-Xmx1024m</opt>
+                                            <opt>-Dfile.encoding=UTF-8</opt>
+                                        </opts>
+                                    </jre>
+                                    <versionInfo>
+                                        <fileVersion>1.0.0.0</fileVersion>
+                                        <txtFileVersion>${project.version}</txtFileVersion>
+                                        <fileDescription>${project.name}</fileDescription>
+                                        <copyright>by.agro</copyright>
+                                        <productVersion>1.0.0.0</productVersion>
+                                        <txtProductVersion>${project.version}</txtProductVersion>
+                                        <productName>${project.name}</productName>
+                                        <internalName>AgroLauncher</internalName>
+                                        <originalFilename>AgroLauncher.exe</originalFilename>
+                                    </versionInfo>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

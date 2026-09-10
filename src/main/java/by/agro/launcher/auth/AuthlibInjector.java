@@ -38,7 +38,7 @@ public final class AuthlibInjector {
                 listener.onMessage("Не удалось проверить обновление authlib-injector, используется локальная копия");
                 return jar;
             }
-            throw new IOException("Не удалось получить authlib-injector: " + e.getMessage(), e);
+            throw new IOException("Failed to retrieve authlib-injector: " + e.getMessage(), e);
         }
 
         JsonObject info = Json.parseObject(metadata);
@@ -50,13 +50,16 @@ public final class AuthlibInjector {
             sha256 = Json.string(checksums, "sha256", null);
         }
         if (url == null) {
-            throw new IOException("В метаданных authlib-injector нет ссылки на файл");
+            throw new IOException("authlib-injector metadata does not contain a file URL");
+        }
+        if (sha256 == null || sha256.isBlank()) {
+            throw new IOException("authlib-injector metadata does not contain a SHA-256 checksum");
         }
 
         boolean upToDate = Files.exists(jar)
                 && Files.exists(versionMarker)
                 && version.equals(Files.readString(versionMarker).trim())
-                && (sha256 == null || HashUtil.verifySha256(jar, sha256));
+                && HashUtil.verifySha256(jar, sha256);
 
         if (upToDate) {
             return jar;
@@ -64,12 +67,7 @@ public final class AuthlibInjector {
 
         listener.onProgress("authlib-injector", 0, 1, "загрузка " + version);
         Files.createDirectories(paths.authlibDir());
-        downloader.download(url, jar);
-
-        if (sha256 != null && !HashUtil.verifySha256(jar, sha256)) {
-            Files.deleteIfExists(jar);
-            throw new IOException("Контрольная сумма authlib-injector не совпала");
-        }
+        downloader.downloadVerified(url, jar, "SHA-256", sha256, 64L * 1024 * 1024);
         Files.writeString(versionMarker, version);
 
         listener.onProgress("authlib-injector", 1, 1, version);

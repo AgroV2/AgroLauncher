@@ -210,21 +210,22 @@ public final class LaunchCommandBuilder {
     
     private String buildClasspath(ResolvedVersion version, Rule.FeatureSet features) {
         Set<String> entries = new LinkedHashSet<>();
+        List<Library> classpathLibraries = version.classpathLibraries(features);
 
-        for (Library library : version.classpathLibraries(features)) {
+        for (Library library : classpathLibraries) {
             Path jar = paths.librariesDir().resolve(library.relativePath());
-            entries.add(jar.toAbsolutePath().toString());
+            entries.add(jar.toAbsolutePath().normalize().toString());
         }
 
-        
-        Path clientJar = paths.versionJar(version.jarVersionId);
-        if (Files.exists(clientJar)) {
-            entries.add(clientJar.toAbsolutePath().toString());
-        } else {
-            
-            Path fallback = paths.versionJar(version.id);
-            if (Files.exists(fallback)) {
-                entries.add(fallback.toAbsolutePath().toString());
+        if (version.chain.size() == 1) {
+            Path clientJar = paths.versionJar(version.jarVersionId);
+            if (Files.exists(clientJar)) {
+                entries.add(clientJar.toAbsolutePath().normalize().toString());
+            } else {
+                Path fallback = paths.versionJar(version.id);
+                if (Files.exists(fallback)) {
+                    entries.add(fallback.toAbsolutePath().normalize().toString());
+                }
             }
         }
 

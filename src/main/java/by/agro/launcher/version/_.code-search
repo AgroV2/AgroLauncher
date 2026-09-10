@@ -1,0 +1,203 @@
+# Query: //
+# ContextLines: 1
+
+54 results - 28 files
+
+pom.xml:
+   1  <?xml version="1.0" encoding="UTF-8"?>
+   2: <project xmlns="http://maven.apache.org/POM/4.0.0"
+   3:          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   4:          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+   5      <modelVersion>4.0.0</modelVersion>
+
+  30          <windows.jre.archive>OpenJDK17U-jre_x64_windows_hotspot_${windows.jre.version}.zip</windows.jre.archive>
+  31:         <windows.jre.url>https://github.com/adoptium/temurin17-binaries/releases/download/${windows.jre.tag}/${windows.jre.archive}</windows.jre.url>
+  32          <windows.jre.unpacked>${project.build.directory}/windows-jre-unpacked</windows.jre.unpacked>
+
+README.md:
+  231  
+  232: - [FlatLaf](https://www.formdev.com/flatlaf/) 3.7.2 — современный внешний вид Swing
+  233: - [Gson](https://github.com/google/gson) 2.14.0 — работа с JSON
+  234  
+  235: Каталог модов работает через открытый [API Modrinth](https://docs.modrinth.com/) — ключ не требуется.
+  236  
+
+src/main/java/by/agro/launcher/auth/AuthlibInjector.java:
+  16  
+  17:     private static final String LATEST_METADATA = "https://authlib-injector.yushi.moe/artifact/latest.json";
+  18  
+
+src/main/java/by/agro/launcher/auth/ElyByAuth.java:
+  16  
+  17:     public static final String AUTH_SERVER = "https://authserver.ely.by";
+  18      public static final String INJECTOR_ARGUMENT = "ely.by";
+
+src/main/java/by/agro/launcher/core/Downloader.java:
+  172              } catch (IOException ignored) {
+  173:            
+  174              }
+
+  328                  } catch (IllegalArgumentException ignored) {
+  329:                    
+  330                  }
+
+src/main/java/by/agro/launcher/core/SecureFiles.java:
+  43          } catch (UnsupportedOperationException ignored) {
+  44:           
+  45          }
+
+src/main/java/by/agro/launcher/diagnostics/LaunchSession.java:
+  47          lines.addLast(line);
+  48:        
+  49          try {
+
+  84      public synchronized void close() {
+  85:      
+  86      }
+
+src/main/java/by/agro/launcher/jvm/JavaManager.java:
+  22      private static final String ADOPTIUM_ASSETS =
+  23:             "https://api.adoptium.net/v3/assets/latest/%d/hotspot?image_type=jre&os=%s&architecture=%s";
+  24  
+
+src/main/java/by/agro/launcher/launch/LaunchCommandBuilder.java:
+  219  
+  220:        
+  224          if (version.chain.size() == 1) {
+
+src/main/java/by/agro/launcher/loaders/FabricInstaller.java:
+  20  
+  21:     protected static final String META_BASE = "https://meta.fabricmc.net/v2";
+  22  
+
+src/main/java/by/agro/launcher/loaders/ForgeInstaller.java:
+  29      private static final String PROMOTIONS_URL =
+  30:             "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
+  31      private static final String MAVEN_BASE =
+  32:             "https://maven.minecraftforge.net/net/minecraftforge/forge/";
+  33      private static final long INSTALL_TIMEOUT_MINUTES = 15;
+
+src/main/java/by/agro/launcher/loaders/NeoForgeInstaller.java:
+  14      private static final String MAVEN_BASE =
+  15:             "https://maven.neoforged.net/releases/net/neoforged/neoforge/";
+  16  
+
+src/main/java/by/agro/launcher/loaders/OptiFineInstaller.java:
+  24  
+  25:     private static final String VERSION_LIST_URL = "https://bmclapi2.bangbang93.com/optifine/versionlist";
+  26      private static final String LAUNCHWRAPPER_ENTRY_PREFIX = "launchwrapper-of-";
+
+src/main/java/by/agro/launcher/loaders/QuiltInstaller.java:
+  7  
+  8:     private static final String QUILT_META_BASE = "https://meta.quiltmc.org/v3";
+  9  
+
+src/main/java/by/agro/launcher/modrinth/ModrinthClient.java:
+  18  
+  19:     private static final String API_BASE = "https://api.modrinth.com/v2";
+  20  
+
+src/main/java/by/agro/launcher/modrinth/ModrinthProject.java:
+  110      public String pageUrl() {
+  111:         return "https://modrinth.com/mod/" + (slug != null ? slug : id);
+  112      }
+
+src/main/java/by/agro/launcher/ui/MainWindow.java:
+  318      public void applyInitialWindowOpacity() {
+  319:       
+  321          SwingUtilities.invokeLater(this::applyWindowOpacity);
+
+  335          try {
+  336:          
+  338              setOpacity(opacity);
+
+src/main/java/by/agro/launcher/ui/panels/AppearancePanel.java:
+  328              if (slider == windowOpacitySlider) {
+  329:          
+  330                  notifyChanged();
+
+src/main/java/by/agro/launcher/ui/panels/ModsPanel.java:
+  35  
+  36:     private static final String CURSEFORGE_URL = "https://www.curseforge.com/minecraft/mc-mods";
+  37  
+
+src/main/java/by/agro/launcher/ui/panels/SettingsPanel.java:
+  177  
+  178:         useManagedJava.setVisible(false);
+  179          javaModeCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+src/main/java/by/agro/launcher/version/AssetManager.java:
+  26  
+  27:     private static final String RESOURCES_BASE = "https://resources.download.minecraft.net/";
+  28  
+
+  90              if (mapToResources) {
+  91:
+  92                  return paths.assetsDir();
+
+src/main/java/by/agro/launcher/version/JavaRequirement.java:
+  37          if (parsed == null) {
+  38:           
+  40              return JAVA_25;
+
+  93      public static int normalize(int majorVersion) {
+  94:     
+  96          return majorVersion > 0 ? majorVersion : JAVA_21;
+
+src/main/java/by/agro/launcher/version/Library.java:
+  177              }
+  178:          
+  179              return syntheticArtifact(nativeClassifier);
+
+  198                  ? mavenUrl
+  199:                 : "https://libraries.minecraft.net/";
+  200          if (!base.endsWith("/")) {
+
+src/main/java/by/agro/launcher/version/NativesExtractor.java:
+   72                  }
+   73:               
+   74                  if (!isNativeBinary(name)) {
+
+   76                  }
+   77:           
+   78                  String fileName = name.substring(name.lastIndexOf('/') + 1);
+
+   82                  Path target = targetDir.resolve(fileName);
+   83:               
+   84                  if (!target.normalize().startsWith(targetDir.normalize())) {
+
+  130          } catch (IOException | UnsupportedOperationException ignored) {
+  131:          
+  132          }
+
+src/main/java/by/agro/launcher/version/RemoteVersion.java:
+  6      public final String id;
+  7:     public final String type;    
+  8      public final String url;
+
+src/main/java/by/agro/launcher/version/Rule.java:
+   79          if (osName != null) {
+   80:           
+   81              String current = Platform.current().mojangName();
+
+   87              String arch = Platform.arch();
+   88:         
+   89              String raw = System.getProperty("os.arch", "").toLowerCase();
+
+  100              } catch (PatternSyntaxException e) {
+  101:               
+  102                  return false;
+
+src/main/java/by/agro/launcher/version/VersionManifest.java:
+  26      public static final String MANIFEST_URL =
+  27:             "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+  28  
+
+src/main/java/by/agro/launcher/version/VersionResolver.java:
+  124                  String key = library.groupArtifactKey();
+  125:             
+  126                  if (keysFromChildren.contains(key)) {
+
+  134  
+  135:     
+  136          List<Argument> gameArguments = new ArrayList<>();

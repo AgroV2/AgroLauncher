@@ -1,10 +1,10 @@
 package by.agro.launcher.version;
 
-/** Запись о версии из version_manifest_v2.json. */
+
 public final class RemoteVersion {
 
     public final String id;
-    public final String type;      // release / snapshot / old_beta / old_alpha
+    public final String type;      
     public final String url;
     public final String sha1;
     public final String releaseTime;

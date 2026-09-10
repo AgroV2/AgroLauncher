@@ -1,26 +1,26 @@
 package by.agro.launcher.core;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpCookie;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-
-
 
 public final class Downloader {
 
@@ -29,8 +29,11 @@ public final class Downloader {
     private static final int READ_TIMEOUT_MS = 60_000;
     private static final int MAX_RETRIES = 3;
     private static final int MAX_REDIRECTS = 6;
+    private static final long DEFAULT_MAX_DOWNLOAD_BYTES = 512L * 1024 * 1024;
+    private static final long MAX_TEXT_BYTES = 16L * 1024 * 1024;
 
     private final int threads;
+    private final Map<String, Map<String, String>> cookiesByHost = new ConcurrentHashMap<>();
 
     public Downloader() {
         this(Math.max(4, Math.min(16, Runtime.getRuntime().availableProcessors() * 2)));
@@ -40,7 +43,6 @@ public final class Downloader {
         this.threads = threads;
     }
 
-    
     public static final class Task {
         public final String url;
         public final Path target;
@@ -59,8 +61,6 @@ public final class Downloader {
         }
     }
 
-    
-
     public void downloadAll(List<Task> tasks, String stageName, ProgressListener listener) throws IOException {
         List<Task> pending = new ArrayList<>();
         for (Task task : tasks) {
@@ -74,34 +74,31 @@ public final class Downloader {
         }
 
         ExecutorService pool = Executors.newFixedThreadPool(Math.min(threads, pending.size()), r -> {
-            Thread t = new Thread(r, "emerald-downloader");
+            Thread t = new Thread(r, "agro-downloader");
             t.setDaemon(true);
             return t;
         });
-
         AtomicInteger done = new AtomicInteger();
         AtomicReference<Exception> firstError = new AtomicReference<>();
         int total = pending.size();
         List<Future<?>> futures = new ArrayList<>(total);
-
         try {
             for (Task task : pending) {
                 futures.add(pool.submit(() -> {
                     try {
-                        if (firstError.get() != null) {
-                            return;
+                        if (firstError.get() == null) {
+                            download(task.url, task.target, task.sha1, task.size);
+                            int n = done.incrementAndGet();
+                            listener.onProgress(stageName, n, total, task.target.getFileName().toString());
                         }
-                        download(task.url, task.target, task.sha1);
-                        int n = done.incrementAndGet();
-                        listener.onProgress(stageName, n, total, task.target.getFileName().toString());
                     } catch (Exception e) {
                         firstError.compareAndSet(null, e);
                     }
                 }));
             }
-            for (Future<?> f : futures) {
+            for (Future<?> future : futures) {
                 try {
-                    f.get();
+                    future.get();
                 } catch (Exception e) {
                     firstError.compareAndSet(null, e);
                 }
@@ -114,183 +111,238 @@ public final class Downloader {
                 Thread.currentThread().interrupt();
             }
         }
-
-        Exception error = firstError.get();
-        if (error != null) {
-            throw new IOException("Не удалось загрузить файлы: " + error.getMessage(), error);
+        if (firstError.get() != null) {
+            throw new IOException("Failed to download files: " + firstError.get().getMessage(), firstError.get());
         }
     }
 
-    
     public void download(String url, Path target, String expectedSha1) throws IOException {
+        download(url, target, expectedSha1, 0);
+    }
+
+    public void download(String url, Path target, String expectedSha1, long expectedSize) throws IOException {
         if (HashUtil.verify(target, expectedSha1)) {
             return;
         }
-        Files.createDirectories(target.toAbsolutePath().getParent());
-        Path temp = target.resolveSibling(target.getFileName() + ".part");
-
+        long limit = expectedSize > 0
+                ? Math.min(DEFAULT_MAX_DOWNLOAD_BYTES, expectedSize + Math.max(1024, expectedSize / 100))
+                : DEFAULT_MAX_DOWNLOAD_BYTES;
         IOException last = null;
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            Path temp = SecureFiles.createSiblingTemp(target, ".part");
             try {
-                transfer(url, temp);
+                transfer(url, temp, Map.of(), limit);
                 if (expectedSha1 != null && !expectedSha1.isBlank()) {
                     String actual = HashUtil.sha1(temp);
                     if (!actual.equalsIgnoreCase(expectedSha1)) {
-                        Files.deleteIfExists(temp);
-                        throw new IOException("Несовпадение SHA-1 для " + url
-                                + " (ожидалось " + expectedSha1 + ", получено " + actual + ")");
+                        throw new IOException("SHA-1 mismatch for " + url + " (expected "
+                                + expectedSha1 + ", got " + actual + ")");
                     }
                 }
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+                SecureFiles.atomicReplace(temp, target.toAbsolutePath().normalize());
                 return;
             } catch (IOException e) {
                 last = e;
-                try {
-                    Files.deleteIfExists(temp);
-                } catch (IOException ignored) {
-                }
+                Files.deleteIfExists(temp);
                 if (attempt < MAX_RETRIES) {
                     try {
                         Thread.sleep(500L * attempt);
-                    } catch (InterruptedException ie) {
+                    } catch (InterruptedException interrupted) {
                         Thread.currentThread().interrupt();
-                        throw new IOException("Загрузка прервана", ie);
+                        throw new IOException("Download interrupted", interrupted);
                     }
                 }
+            } finally {
+                Files.deleteIfExists(temp);
             }
         }
-        throw new IOException("Не удалось скачать " + url + " после " + MAX_RETRIES + " попыток", last);
+        throw new IOException("Failed to download " + url + " after " + MAX_RETRIES + " attempts", last);
+    }
+
+    public void downloadVerified(String url, Path target, String algorithm, String expectedDigest,
+                                 long maxBytes) throws IOException {
+        if (expectedDigest == null || expectedDigest.isBlank()) {
+            throw new IOException("A cryptographic digest is required for executable artifact: " + url);
+        }
+        if (Files.exists(target)) {
+            try {
+                if (expectedDigest.equalsIgnoreCase(HashUtil.digest(target, algorithm))) {
+                    return;
+                }
+            } catch (IOException ignored) {
+            }
+        }
+        Path temp = SecureFiles.createSiblingTemp(target, ".part");
+        try {
+            transfer(url, temp, Map.of(), maxBytes > 0 ? maxBytes : DEFAULT_MAX_DOWNLOAD_BYTES);
+            String actual = HashUtil.digest(temp, algorithm);
+            if (!actual.equalsIgnoreCase(expectedDigest)) {
+                throw new IOException(algorithm + " mismatch for " + url);
+            }
+            SecureFiles.atomicReplace(temp, target.toAbsolutePath().normalize());
+        } finally {
+            Files.deleteIfExists(temp);
+        }
     }
 
     public void download(String url, Path target) throws IOException {
-        download(url, target, null);
+        download(url, target, null, 0);
     }
 
-    private void transfer(String url, Path target) throws IOException {
-        transfer(url, target, Map.of());
-    }
-
-    private void transfer(String url, Path target, Map<String, String> headers) throws IOException {
-        HttpURLConnection conn = openWithRedirects(url, headers);
-        try (InputStream in = conn.getInputStream();
-             OutputStream out = Files.newOutputStream(target)) {
-            byte[] buffer = new byte[65536];
-            int read;
-            while ((read = in.read(buffer)) > 0) {
-                out.write(buffer, 0, read);
-            }
-        } finally {
-            conn.disconnect();
-        }
-    }
-
-    
     public String getString(String url) throws IOException {
         return getString(url, Map.of());
     }
 
-    
     public String getString(String url, Map<String, String> headers) throws IOException {
-        HttpURLConnection conn = openWithRedirects(url, headers);
-        try (InputStream in = conn.getInputStream()) {
-            collectCookies(conn);
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        HttpURLConnection connection = openWithRedirects(url, headers);
+        try (InputStream in = connection.getInputStream();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            copyLimited(in, out, MAX_TEXT_BYTES);
+            return out.toString(StandardCharsets.UTF_8);
         } finally {
-            conn.disconnect();
+            connection.disconnect();
         }
     }
-
 
     public void downloadWithHeaders(String url, Path target, Map<String, String> headers) throws IOException {
-        Files.createDirectories(target.toAbsolutePath().getParent());
-        Path temp = target.resolveSibling(target.getFileName() + ".part");
+        Path temp = SecureFiles.createSiblingTemp(target, ".part");
         try {
-            transfer(url, temp, headers);
-            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
+            transfer(url, temp, headers, DEFAULT_MAX_DOWNLOAD_BYTES);
+            SecureFiles.atomicReplace(temp, target.toAbsolutePath().normalize());
+        } finally {
             Files.deleteIfExists(temp);
-            throw e;
         }
     }
 
-    
-    private final Map<String, String> cookies = new java.util.concurrent.ConcurrentHashMap<>();
-
-    private void collectCookies(HttpURLConnection conn) {
-        List<String> setCookies = conn.getHeaderFields().get("Set-Cookie");
-        if (setCookies == null) {
-            return;
+    private void transfer(String url, Path target, Map<String, String> headers, long maxBytes) throws IOException {
+        HttpURLConnection connection = openWithRedirects(url, headers);
+        long contentLength = connection.getContentLengthLong();
+        if (contentLength > maxBytes) {
+            connection.disconnect();
+            throw new IOException("Download exceeds size limit: " + contentLength + " > " + maxBytes);
         }
-        for (String header : setCookies) {
-            int semicolon = header.indexOf(';');
-            String pair = semicolon > 0 ? header.substring(0, semicolon) : header;
-            int equals = pair.indexOf('=');
-            if (equals > 0) {
-                cookies.put(pair.substring(0, equals).trim(), pair.substring(equals + 1).trim());
+        try (InputStream in = connection.getInputStream(); OutputStream out = Files.newOutputStream(target)) {
+            copyLimited(in, out, maxBytes);
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private static long copyLimited(InputStream in, OutputStream out, long maxBytes) throws IOException {
+        byte[] buffer = new byte[65536];
+        long total = 0;
+        int read;
+        while ((read = in.read(buffer)) >= 0) {
+            if (read == 0) {
+                continue;
             }
-        }
-    }
-
-    private String cookieHeader() {
-        if (cookies.isEmpty()) {
-            return null;
-        }
-        StringBuilder sb = new StringBuilder();
-        for (Map.Entry<String, String> entry : cookies.entrySet()) {
-            if (sb.length() > 0) {
-                sb.append("; ");
+            total += read;
+            if (total > maxBytes) {
+                throw new IOException("Response exceeds size limit of " + maxBytes + " bytes");
             }
-            sb.append(entry.getKey()).append('=').append(entry.getValue());
+            out.write(buffer, 0, read);
         }
-        return sb.toString();
+        return total;
     }
 
-    
     private HttpURLConnection openWithRedirects(String url, Map<String, String> headers) throws IOException {
-        String current = url;
+        URI current = requireHttps(url);
         for (int i = 0; i < MAX_REDIRECTS; i++) {
-            HttpURLConnection conn = open(current, headers);
-            collectCookies(conn);
-            int code = conn.getResponseCode();
-            if (code == HttpURLConnection.HTTP_MOVED_PERM
-                    || code == HttpURLConnection.HTTP_MOVED_TEMP
-                    || code == HttpURLConnection.HTTP_SEE_OTHER
-                    || code == 307 || code == 308) {
-                String location = conn.getHeaderField("Location");
-                conn.disconnect();
+            HttpURLConnection connection = open(current, headers);
+            int code = connection.getResponseCode();
+            collectCookies(connection, current);
+            if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                String location = connection.getHeaderField("Location");
+                connection.disconnect();
                 if (location == null || location.isBlank()) {
-                    throw new IOException("Редирект без Location: " + current);
+                    throw new IOException("Redirect response has no Location header: " + current);
                 }
-                current = URI.create(current).resolve(location).toString();
+                try {
+                    current = requireHttps(current.resolve(location).toString());
+                } catch (IllegalArgumentException e) {
+                    throw new IOException("Invalid redirect URL from " + current, e);
+                }
                 continue;
             }
             if (code < 200 || code >= 300) {
-                conn.disconnect();
-                throw new IOException("HTTP " + code + " для " + current);
+                connection.disconnect();
+                throw new IOException("HTTP " + code + " for " + current);
             }
-            return conn;
+            return connection;
         }
-        throw new IOException("Слишком много редиректов для " + url);
+        throw new IOException("Too many redirects for " + url);
     }
 
-    private HttpURLConnection open(String url, Map<String, String> headers) throws IOException {
-        URL parsed = URI.create(url).toURL();
-        HttpURLConnection conn = (HttpURLConnection) parsed.openConnection();
-        conn.setInstanceFollowRedirects(false);
-        conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        conn.setReadTimeout(READ_TIMEOUT_MS);
-        conn.setRequestProperty("User-Agent", USER_AGENT);
-        conn.setRequestProperty("Accept", "*/*");
-
-        String cookieHeader = cookieHeader();
+    private HttpURLConnection open(URI uri, Map<String, String> headers) throws IOException {
+        URL parsed = uri.toURL();
+        HttpURLConnection connection = (HttpURLConnection) parsed.openConnection();
+        connection.setInstanceFollowRedirects(false);
+        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+        connection.setReadTimeout(READ_TIMEOUT_MS);
+        connection.setRequestProperty("User-Agent", USER_AGENT);
+        connection.setRequestProperty("Accept", "*/*");
+        String cookieHeader = cookieHeader(uri.getHost());
         if (cookieHeader != null) {
-            conn.setRequestProperty("Cookie", cookieHeader);
+            connection.setRequestProperty("Cookie", cookieHeader);
         }
         if (headers != null) {
             for (Map.Entry<String, String> entry : headers.entrySet()) {
-                conn.setRequestProperty(entry.getKey(), entry.getValue());
+                if (!"cookie".equalsIgnoreCase(entry.getKey())) {
+                    connection.setRequestProperty(entry.getKey(), entry.getValue());
+                }
             }
         }
-        return conn;
+        return connection;
+    }
+
+    private static URI requireHttps(String url) throws IOException {
+        final URI uri;
+        try {
+            uri = URI.create(url);
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Invalid URL: " + url, e);
+        }
+        if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
+            throw new IOException("Only absolute HTTPS URLs are allowed: " + url);
+        }
+        return uri;
+    }
+
+    private void collectCookies(HttpURLConnection connection, URI origin) {
+        Map<String, String> hostCookies = cookiesByHost.computeIfAbsent(
+                origin.getHost().toLowerCase(), ignored -> new ConcurrentHashMap<>());
+        for (Map.Entry<String, List<String>> header : connection.getHeaderFields().entrySet()) {
+            if (header.getKey() == null || !"set-cookie".equalsIgnoreCase(header.getKey())) {
+                continue;
+            }
+            for (String value : header.getValue()) {
+                try {
+                    for (HttpCookie cookie : HttpCookie.parse(value)) {
+                        String domain = cookie.getDomain();
+                        if (domain == null || domain.isBlank()
+                                || domain.replaceFirst("^\\.", "").equalsIgnoreCase(origin.getHost())) {
+                            hostCookies.put(cookie.getName(), cookie.getValue());
+                        }
+                    }
+                } catch (IllegalArgumentException ignored) {
+                 
+                }
+            }
+        }
+    }
+
+    private String cookieHeader(String host) {
+        Map<String, String> hostCookies = cookiesByHost.get(host.toLowerCase());
+        if (hostCookies == null || hostCookies.isEmpty()) {
+            return null;
+        }
+        StringBuilder result = new StringBuilder();
+        for (Map.Entry<String, String> cookie : hostCookies.entrySet()) {
+            if (result.length() > 0) {
+                result.append("; ");
+            }
+            result.append(cookie.getKey()).append('=').append(cookie.getValue());
+        }
+        return result.toString();
     }
 }

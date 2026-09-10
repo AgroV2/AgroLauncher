@@ -33,7 +33,7 @@ public final class OfflineAuth {
         try {
             md5 = MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("MD5 недоступен", e);
+            throw new IllegalStateException("MD5 is unavailable", e);
         }
         byte[] hash = md5.digest(data);
         hash[6] &= 0x0f;

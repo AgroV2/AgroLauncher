@@ -107,7 +107,7 @@ public class FabricInstaller implements LoaderInstaller {
     protected String pickRecommended(String minecraftVersion) throws IOException {
         List<LoaderVersion> versions = availableVersions(minecraftVersion);
         if (versions.isEmpty()) {
-            throw new IOException(type().displayName() + " не поддерживает Minecraft " + minecraftVersion);
+            throw new IOException(type().displayName() + " does not support Minecraft " + minecraftVersion);
         }
         for (LoaderVersion version : versions) {
             if (version.stable) {

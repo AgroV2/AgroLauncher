@@ -22,6 +22,8 @@ public final class IconCache {
 
     private static final int ICON_SIZE = 64;
     private static final int MAX_MEMORY_ENTRIES = 300;
+    private static final long MAX_ICON_BYTES = 8L * 1024 * 1024;
+    private static final int MAX_REDIRECTS = 5;
 
     private final Path cacheDir;
     private final Map<String, BufferedImage> memoryCache = new ConcurrentHashMap<>();
@@ -98,15 +100,84 @@ public final class IconCache {
     }
 
     private BufferedImage download(String url) throws IOException {
-        HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
-        connection.setRequestProperty("User-Agent", "AgroLauncher/1.0");
-        connection.setConnectTimeout(12_000);
-        connection.setReadTimeout(20_000);
-        connection.setInstanceFollowRedirects(true);
-        try (InputStream in = connection.getInputStream()) {
-            return ImageIO.read(in);
-        } finally {
-            connection.disconnect();
+        URI current = requireHttps(url);
+        for (int redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
+            HttpURLConnection connection = (HttpURLConnection) current.toURL().openConnection();
+            connection.setRequestProperty("User-Agent", "AgroLauncher/1.0");
+            connection.setConnectTimeout(12_000);
+            connection.setReadTimeout(20_000);
+            connection.setInstanceFollowRedirects(false);
+            int code = connection.getResponseCode();
+            if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                String location = connection.getHeaderField("Location");
+                connection.disconnect();
+                if (location == null || location.isBlank()) {
+                    throw new IOException("Icon redirect has no Location header");
+                }
+                current = requireHttps(current.resolve(location).toString());
+                continue;
+            }
+            if (code < 200 || code >= 300) {
+                connection.disconnect();
+                throw new IOException("HTTP " + code + " while loading icon");
+            }
+            long length = connection.getContentLengthLong();
+            if (length > MAX_ICON_BYTES) {
+                connection.disconnect();
+                throw new IOException("Icon exceeds size limit");
+            }
+            try (InputStream raw = connection.getInputStream();
+                 InputStream limited = new LimitedInputStream(raw, MAX_ICON_BYTES)) {
+                return ImageIO.read(limited);
+            } finally {
+                connection.disconnect();
+            }
+        }
+        throw new IOException("Too many icon redirects");
+    }
+
+    private static URI requireHttps(String url) throws IOException {
+        try {
+            URI uri = URI.create(url);
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
+                throw new IOException("Only HTTPS icon URLs are allowed: " + url);
+            }
+            return uri;
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Invalid icon URL: " + url, e);
+        }
+    }
+
+    private static final class LimitedInputStream extends java.io.FilterInputStream {
+        private long remaining;
+
+        LimitedInputStream(InputStream input, long limit) {
+            super(input);
+            remaining = limit;
+        }
+
+        @Override
+        public int read() throws IOException {
+            if (remaining == 0) {
+                throw new IOException("Icon exceeds size limit");
+            }
+            int value = super.read();
+            if (value >= 0) {
+                remaining--;
+            }
+            return value;
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            if (remaining == 0) {
+                throw new IOException("Icon exceeds size limit");
+            }
+            int read = super.read(buffer, offset, (int) Math.min(length, remaining));
+            if (read > 0) {
+                remaining -= read;
+            }
+            return read;
         }
     }
 

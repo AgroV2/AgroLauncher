@@ -8,13 +8,7 @@ import com.google.gson.JsonObject;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Разобранный version.json — как ванильный, так и профили Fabric/Forge/Quilt/NeoForge/OptiFine.
- *
- * Поддерживает оба формата аргументов:
- *  - "arguments": { "game": [...], "jvm": [...] }  (1.13+)
- *  - "minecraftArguments": "строка"                (1.12.2 и старше)
- */
+
 public final class VersionJson {
 
     public final String id;
@@ -32,10 +26,8 @@ public final class VersionJson {
     public final List<Argument> gameArguments;
     public final List<Argument> jvmArguments;
 
-    /** Строковые аргументы старого формата (1.12.2 и ниже). */
     public final String minecraftArguments;
 
-    /** Исходный JSON — нужен для повторной сериализации профилей. */
     public final JsonObject raw;
 
     private VersionJson(Builder b) {
@@ -160,12 +152,12 @@ public final class VersionJson {
         return new VersionJson(b);
     }
 
-    /** Использует ли версия старый строковый формат аргументов. */
+
     public boolean isLegacyArguments() {
         return (gameArguments == null || gameArguments.isEmpty()) && minecraftArguments != null;
     }
 
-    /** Версии до 1.6 требуют --session вместо --accessToken и virtual assets. */
+  
     public boolean isPreV16Assets() {
         return "pre-1.6".equals(assets) || "legacy".equals(assets);
     }

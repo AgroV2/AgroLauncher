@@ -27,6 +27,8 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
+import java.awt.IllegalComponentStateException;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
@@ -304,17 +306,39 @@ public final class MainWindow extends JFrame {
 
 
     private void onAppearanceChanged() {
-        SwingUtilities.invokeLater(() -> {
-            backgroundManager.load(context.settings());
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(this::onAppearanceChanged);
+            return;
+        }
+        applyWindowOpacity();
+        repaint();
+    }
 
-            by.agro.launcher.ui.components.UiFactory.setCardOpacityPercent(
-                    backgroundManager.hasBackground()
-                            ? context.settings().panelOpacityPercent
-                            : 100);
-            applyThemeColors();
-            SwingUtilities.updateComponentTreeUI(this);
-            repaint();
-        });
+
+    public void applyInitialWindowOpacity() {
+        SwingUtilities.invokeLater(this::applyWindowOpacity);
+    }
+
+    private void applyWindowOpacity() {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(this::applyWindowOpacity);
+            return;
+        }
+        float opacity = Math.max(0.2f,
+                Math.min(1.0f, context.settings().windowOpacityPercent / 100f));
+        if (!isDisplayable() || !isVisible() || GraphicsEnvironment.isHeadless()) {
+            return;
+        }
+
+        try {
+            setOpacity(opacity);
+        } catch (UnsupportedOperationException | IllegalComponentStateException | SecurityException e) {
+            String message = "Window opacity is unsupported by this desktop/compositor: "
+                    + e.getClass().getSimpleName()
+                    + (e.getMessage() == null ? "" : " (" + e.getMessage() + ")");
+            System.err.println(message);
+            setStatus(message);
+        }
     }
 
 

@@ -13,6 +13,11 @@ public interface LoaderInstaller {
 
     String install(String minecraftVersion, String loaderVersion, ProgressListener listener) throws IOException;
 
+    default String forceInstall(String minecraftVersion, String loaderVersion, ProgressListener listener)
+            throws IOException {
+        return install(minecraftVersion, loaderVersion, listener);
+    }
+
     default boolean supports(String minecraftVersion) {
         try {
             return !availableVersions(minecraftVersion).isEmpty();

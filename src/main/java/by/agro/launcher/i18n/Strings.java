@@ -88,6 +88,27 @@ public final class Strings {
         put("play.exitConfirm", "Игра ещё запущена. Закрыть лаунчер?\nПроцесс игры продолжит работу.",
                 "The game is still running. Close the launcher?\nThe game process will keep running.");
         put("play.exitTitle", "Подтверждение выхода", "Confirm exit");
+        put("repair.button", "Исправление багов", "Bug fixing tool");
+        put("repair.title", "Исправление багов", "Bug fixing tool");
+        put("repair.starting", "Подготовка безопасного восстановления…", "Preparing safe repair…");
+        put("repair.confirm",
+                "Будут перепроверены и при необходимости переустановлены:\n"
+                        + "• Minecraft {0} (только version JSON/JAR и проверяемые зависимости)\n"
+                        + "• загрузчик {1}\n"
+                        + "• только моды с явной записью об установке лаунчером\n\n"
+                        + "Будут сохранены: миры, скриншоты, ресурспаки, шейдеры, config, options*.txt, "
+                        + "servers.dat*, usercache.json, логи, crash-reports, пользовательские и неизвестные моды/файлы.\n"
+                        + "Каталог игры целиком не удаляется. Продолжить?",
+                "The following will be verified and reinstalled when needed:\n"
+                        + "• Minecraft {0} (version JSON/JAR and verifiable dependencies only)\n"
+                        + "• {1} loader\n"
+                        + "• only mods explicitly recorded as launcher-installed\n\n"
+                        + "Preserved: worlds, screenshots, resource packs, shaders, config, options*.txt, "
+                        + "servers.dat*, usercache.json, logs, crash reports, user and unknown mods/files.\n"
+                        + "The game directory is never deleted. Continue?");
+        put("repair.success", "Восстановление завершено. Управляемых модов проверено: {0}",
+                "Repair completed. Launcher-managed mods verified: {0}");
+        put("repair.error", "Восстановление не выполнено: {0}", "Repair failed: {0}");
 
 
         put("versions.title", "Версии", "Versions");
@@ -120,7 +141,7 @@ public final class Strings {
         put("versions.typeBeta", "бета", "beta");
         put("versions.typeAlpha", "альфа", "alpha");
         put("loader.recommended", "рекомендуется", "recommended");
-        put("theme.qtSystem", "Тема QT (Нестабильная)", "QT Theme (Unstable)");
+        put("theme.qtSystem", "Тема QT", "QT Theme");
         put("theme.qtSystem.desc",
                 "Цвета системной палитры рабочего стола (Qt/KDE через доступные Swing defaults)",
                 "Desktop system palette (Qt/KDE through available Swing defaults)");
@@ -353,6 +374,7 @@ public final class Strings {
         put("appearance.blurRadius", "Радиус размытия", "Blur radius");
         put("appearance.dim", "Затемнение фона", "Background dimming");
         put("appearance.panelOpacity", "Плотность панелей", "Panel opacity");
+        put("appearance.windowOpacity", "Прозрачность окна", "Window opacity");
         put("appearance.fileNotFound", "Файл не найден: {0}", "File not found: {0}");
         put("appearance.formatUnsupported", "Формат изображения не поддерживается",
                 "Image format is not supported");

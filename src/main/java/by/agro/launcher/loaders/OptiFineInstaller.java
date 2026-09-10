@@ -16,23 +16,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.zip.ZipFile;
 
 public final class OptiFineInstaller implements LoaderInstaller {
 
     private static final String VERSION_LIST_URL = "https://bmclapi2.bangbang93.com/optifine/versionlist";
-    private static final String ADLOADX_URL = "https://optifine.net/adloadx?f=";
-    private static final String BASE_URL = "https://optifine.net/";
-    private static final String BROWSER_UA =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                    + "Chrome/124.0.0.0 Safari/537.36";
-    private static final Pattern DOWNLOAD_PATTERN = Pattern.compile("downloadx\\?f=([^\"'&]+)&x=([a-f0-9]+)");
     private static final String LAUNCHWRAPPER_ENTRY_PREFIX = "launchwrapper-of-";
     private static final long PATCH_TIMEOUT_MINUTES = 10;
 
@@ -87,7 +77,7 @@ public final class OptiFineInstaller implements LoaderInstaller {
         if (edition == null || edition.isBlank()) {
             List<LoaderVersion> versions = availableVersions(minecraftVersion);
             if (versions.isEmpty()) {
-                throw new IOException("OptiFine не найден для Minecraft " + minecraftVersion);
+                throw new IOException("OptiFine was not found for Minecraft " + minecraftVersion);
             }
             edition = versions.get(0).version;
         }
@@ -105,7 +95,7 @@ public final class OptiFineInstaller implements LoaderInstaller {
     public String installFromJar(String minecraftVersion, String edition, Path installerJar,
                                  ProgressListener listener) throws IOException {
         if (!Files.exists(installerJar)) {
-            throw new IOException("Файл OptiFine не найден: " + installerJar);
+            throw new IOException("OptiFine file not found: " + installerJar);
         }
         if (edition == null || edition.isBlank()) {
             edition = guessEdition(installerJar.getFileName().toString());
@@ -113,8 +103,8 @@ public final class OptiFineInstaller implements LoaderInstaller {
 
         Path vanillaJar = paths.versionJar(minecraftVersion);
         if (!Files.exists(vanillaJar)) {
-            throw new IOException("Сначала нужно установить ванильную версию " + minecraftVersion
-                    + " — не найден " + vanillaJar);
+            throw new IOException("Install vanilla version " + minecraftVersion + " first; file not found: "
+                    + vanillaJar);
         }
 
         String versionId = minecraftVersion + "-OptiFine_" + edition;
@@ -140,34 +130,8 @@ public final class OptiFineInstaller implements LoaderInstaller {
     }
 
     private void downloadOptiFine(String fileName, Path target, ProgressListener listener) throws IOException {
-        String adloadxUrl = ADLOADX_URL + fileName;
-
-        Map<String, String> pageHeaders = new HashMap<>();
-        pageHeaders.put("User-Agent", BROWSER_UA);
-        pageHeaders.put("Accept", "text/html,application/xhtml+xml");
-
-        String html = downloader.getString(adloadxUrl, pageHeaders);
-        Matcher matcher = DOWNLOAD_PATTERN.matcher(html);
-        if (!matcher.find()) {
-            throw new IOException("Не удалось получить ссылку на " + fileName
-                    + ". Скачайте файл вручную с optifine.net и укажите его в настройках.");
-        }
-        String downloadPath = "downloadx?f=" + matcher.group(1) + "&x=" + matcher.group(2);
-
-        Map<String, String> fileHeaders = new HashMap<>();
-        fileHeaders.put("User-Agent", BROWSER_UA);
-        fileHeaders.put("Referer", adloadxUrl);
-
-        downloader.downloadWithHeaders(BASE_URL + downloadPath, target, fileHeaders);
-
-        if (Files.size(target) < 100_000) {
-            String content = Files.readString(target, StandardCharsets.UTF_8);
-            Files.deleteIfExists(target);
-            throw new IOException("OptiFine вернул некорректный ответ: "
-                    + content.substring(0, Math.min(120, content.length())).trim()
-                    + ". Скачайте jar вручную с optifine.net.");
-        }
-        listener.onMessage("OptiFine загружен: " + fileName);
+        throw new IOException("OptiFine does not publish a cryptographic digest for executable JAR "
+                + fileName + "; automatic download is disabled. Select a trusted local JAR instead.");
     }
 
     private void runPatcher(Path installerJar, Path vanillaJar, Path outputJar, ProgressListener listener)
@@ -208,20 +172,20 @@ public final class OptiFineInstaller implements LoaderInstaller {
         try {
             if (!process.waitFor(PATCH_TIMEOUT_MINUTES, TimeUnit.MINUTES)) {
                 process.destroyForcibly();
-                throw new IOException("Патчинг OptiFine превысил лимит времени");
+                throw new IOException("OptiFine patching timed out");
             }
             if (process.exitValue() != 0) {
-                throw new IOException("optifine.Patcher завершился с кодом "
+                throw new IOException("optifine.Patcher exited with code "
                         + process.exitValue() + "\n" + tail);
             }
         } catch (InterruptedException e) {
             process.destroyForcibly();
             Thread.currentThread().interrupt();
-            throw new IOException("Патчинг прерван", e);
+            throw new IOException("Patching was interrupted", e);
         }
 
         if (!Files.exists(outputJar) || Files.size(outputJar) < 100_000) {
-            throw new IOException("Патчинг OptiFine не создал корректную библиотеку: " + outputJar);
+            throw new IOException("OptiFine patching did not produce a valid library: " + outputJar);
         }
     }
 

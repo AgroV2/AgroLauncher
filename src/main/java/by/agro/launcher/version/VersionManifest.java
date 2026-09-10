@@ -7,14 +7,18 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Глобальный список версий Minecraft (version_manifest_v2.json).
- */
+
 public final class VersionManifest {
 
     public static final String MANIFEST_URL =
@@ -37,6 +41,32 @@ public final class VersionManifest {
 
     public static VersionManifest fetch(Downloader downloader) throws IOException {
         String body = downloader.getString(MANIFEST_URL);
+        return parse(body);
+    }
+
+    public static VersionManifest fetchCached(Downloader downloader, Path cacheFile,
+                                              Duration freshness, boolean offline) throws IOException {
+        if (offline) {
+            if (!Files.isRegularFile(cacheFile)) {
+                throw new IOException("Offline mode requires a cached Minecraft version manifest");
+            }
+            return parse(Files.readString(cacheFile, StandardCharsets.UTF_8));
+        }
+        if (Files.isRegularFile(cacheFile) && freshness != null) {
+            FileTime modified = Files.getLastModifiedTime(cacheFile);
+            if (modified.toInstant().plus(freshness).isAfter(Instant.now())) {
+                return parse(Files.readString(cacheFile, StandardCharsets.UTF_8));
+            }
+        }
+        String body = downloader.getString(MANIFEST_URL);
+        Files.createDirectories(cacheFile.getParent());
+        Path temporary = by.agro.launcher.core.SecureFiles.createSiblingTemp(cacheFile, ".tmp");
+        try {
+            Files.write(temporary, body.getBytes(StandardCharsets.UTF_8));
+            by.agro.launcher.core.SecureFiles.atomicReplace(temporary, cacheFile.toAbsolutePath().normalize());
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
         return parse(body);
     }
 
@@ -84,7 +114,7 @@ public final class VersionManifest {
         return latestSnapshot;
     }
 
-    /** Отфильтрованный список для UI. */
+
     public List<RemoteVersion> filtered(boolean includeSnapshots, boolean includeOld) {
         List<RemoteVersion> result = new ArrayList<>();
         for (RemoteVersion v : versions) {

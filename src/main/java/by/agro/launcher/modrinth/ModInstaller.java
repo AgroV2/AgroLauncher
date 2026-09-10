@@ -3,6 +3,8 @@ package by.agro.launcher.modrinth;
 import by.agro.launcher.core.Downloader;
 import by.agro.launcher.core.LauncherPaths;
 import by.agro.launcher.core.ProgressListener;
+import by.agro.launcher.core.Json;
+import by.agro.launcher.repair.RepairService;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -76,8 +78,16 @@ public final class ModInstaller {
             return;
         }
 
-        Path target = paths.modsDir().resolve(file.filename);
-        Path disabled = paths.modsDir().resolve(file.filename + ".disabled");
+        final Path target;
+        final Path disabled;
+        try {
+            target = safeModPath(file.filename);
+            disabled = safeModPath(file.filename + ".disabled");
+        } catch (IllegalArgumentException e) {
+            result.failed.add(file.filename + ": " + e.getMessage());
+            listener.onMessage(by.agro.launcher.i18n.Strings.get("install.downloadFailed", file.filename, e.getMessage()));
+            return;
+        }
 
         try {
             if (Files.exists(target) || Files.exists(disabled)) {
@@ -86,6 +96,7 @@ public final class ModInstaller {
             } else {
                 listener.onProgress(by.agro.launcher.i18n.Strings.get("install.stage"), result.installed.size(), 0, file.filename);
                 downloader.download(file.url, target, file.sha1);
+                recordManagedMod(file);
                 result.installed.add(file.filename);
                 listener.onMessage(by.agro.launcher.i18n.Strings.get("install.installed", file.filename, file.formattedSize()));
             }
@@ -122,6 +133,36 @@ public final class ModInstaller {
         }
     }
 
+    private Path safeModPath(String filename) {
+        if (filename == null || filename.isBlank()) {
+            throw new IllegalArgumentException("Mod filename is not specified");
+        }
+        Path modsRoot = paths.modsDir().toAbsolutePath().normalize();
+        Path target = modsRoot.resolve(filename).normalize();
+        if (Path.of(filename).isAbsolute() || !target.startsWith(modsRoot)
+                || Path.of(filename).getNameCount() != 1
+                || filename.indexOf('/') >= 0 || filename.indexOf('\\') >= 0) {
+            throw new IllegalArgumentException("Unsafe mod filename: " + filename);
+        }
+        return target;
+    }
+
+    private synchronized void recordManagedMod(ModrinthVersion.File file) throws IOException {
+        if (file.sha1 == null || file.sha1.isBlank()) {
+            throw new IOException("Modrinth did not provide SHA-1 for " + file.filename);
+        }
+        Path metadata = paths.gameDir().resolve(".agrolauncher-managed-mods.json");
+        RepairService.ManagedMods managed = Files.exists(metadata)
+                ? Json.read(metadata, RepairService.ManagedMods.class)
+                : new RepairService.ManagedMods();
+        if (managed == null) {
+            managed = new RepairService.ManagedMods();
+        }
+        managed.mods.removeIf(entry -> entry != null && file.filename.equals(entry.fileName));
+        managed.mods.add(RepairService.ManagedMod.from(file, false));
+        Json.write(metadata, managed);
+    }
+
     private ModrinthVersion resolveDependency(ModrinthVersion.Dependency dependency,
                                               String loader, String gameVersion) throws IOException {
         if (dependency.versionId != null && !dependency.versionId.isBlank()) {
@@ -147,8 +188,11 @@ public final class ModInstaller {
         if (file == null) {
             return false;
         }
-        Path modsDir = paths.modsDir();
-        return Files.exists(modsDir.resolve(file.filename))
-                || Files.exists(modsDir.resolve(file.filename + ".disabled"));
+        try {
+            return Files.exists(safeModPath(file.filename))
+                    || Files.exists(safeModPath(file.filename + ".disabled"));
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 }

@@ -26,7 +26,7 @@ public final class HashUtil {
         try {
             digest = MessageDigest.getInstance(algorithm);
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("Алгоритм не поддерживается: " + algorithm, e);
+            throw new IllegalStateException("Unsupported algorithm: " + algorithm, e);
         }
         byte[] buffer = new byte[65536];
         try (InputStream in = Files.newInputStream(file)) {

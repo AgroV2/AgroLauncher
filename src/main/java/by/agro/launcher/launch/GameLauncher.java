@@ -7,8 +7,13 @@ import by.agro.launcher.core.Downloader;
 import by.agro.launcher.core.LauncherPaths;
 import by.agro.launcher.core.ProgressListener;
 import by.agro.launcher.core.Settings;
+import by.agro.launcher.diagnostics.LaunchSession;
+import by.agro.launcher.diagnostics.Redactor;
 import by.agro.launcher.i18n.Strings;
 import by.agro.launcher.jvm.JavaManager;
+import by.agro.launcher.jvm.JavaSelection;
+import by.agro.launcher.offline.ConnectivityState;
+import by.agro.launcher.offline.OfflinePolicy;
 import by.agro.launcher.version.AssetManager;
 import by.agro.launcher.version.Library;
 import by.agro.launcher.version.NativesExtractor;
@@ -62,20 +67,33 @@ public final class GameLauncher {
         paths.ensureDirectories();
 
         listener.onMessage(Strings.get("progress.versionPrepare", versionId));
-        ResolvedVersion version = resolver.resolve(versionId, manifest, listener);
+        OfflinePolicy policy = new OfflinePolicy(settings.offlineMode
+                ? ConnectivityState.OFFLINE : ConnectivityState.ONLINE);
+        policy.requireLaunchAccount(account);
+        ResolvedVersion version = resolver.resolve(versionId, manifest, listener, policy.offline());
         listener.onMessage(Strings.get("progress.versionChain", String.join(" → ", version.chain)));
 
-        downloadClientJar(version, listener);
+        if (policy.offline()) {
+            verifyLocalInstallation(version);
+        } else {
+            downloadClientJar(version, listener);
+            downloadLibraries(version, listener);
+        }
 
-        downloadLibraries(version, listener);
-
-        Path assetsDir = assetManager.downloadAssets(version, listener);
+        Path assetsDir = policy.offline() ? paths.assetsDir() : assetManager.downloadAssets(version, listener);
 
         Path nativesDir = nativesExtractor.extract(version, featureSet(), listener);
 
         listener.onProgress(Strings.get("progress.javaCheck"), 0, 1, Strings.get("progress.javaRequired", version.javaMajorVersion));
-        String javaExecutable = javaManager.resolveJavaForGame(version.javaMajorVersion, listener);
-        listener.onMessage(Strings.get("progress.javaUsing", javaExecutable));
+        JavaSelection javaSelection = javaManager.selectJava(version.javaMajorVersion, listener, policy.offline());
+        MemoryAdvisor.Advice memory = MemoryAdvisor.advise(version.jarVersionId, settings.selectedLoader,
+                countEnabledMods(launchGameDir), settings.minRamMb, settings.maxRamMb);
+        LaunchPreflight preflight = new LaunchPreflight(javaSelection, memory, List.of());
+        preflight.requireValid();
+        String javaExecutable = javaSelection.executableText();
+        listener.onMessage("Required Java " + javaSelection.requiredMajor + ", selected Java "
+                + javaSelection.detectedMajor + " (" + javaSelection.reason + ")");
+        listener.onMessage("Recommended RAM: " + memory.recommendedMinMb + "–" + memory.recommendedMaxMb + " MB");
 
         
         LaunchOptions options = new LaunchOptions();
@@ -87,7 +105,7 @@ public final class GameLauncher {
         options.nativesDir = nativesDir;
         options.javaExecutable = javaExecutable;
 
-        if (!account.isOffline()) {
+        if (!account.isOffline() && !policy.offline()) {
             listener.onProgress(Strings.get("progress.auth"), 0, 1, account.username);
             ElyByAuth.ensureValidToken(account);
             options.authlibInjectorJar = authlibInjector.ensureInstalled(listener);
@@ -117,15 +135,83 @@ public final class GameLauncher {
         Path gameDir = launchGameDir != null ? launchGameDir : paths.gameDir();
         List<String> command = prepare(versionId, account, manifest, listener, gameDir);
 
-        listener.onMessage("Запуск: " + String.join(" ", command));
-        return GameProcess.start(command, gameDir, onLine, onExit);
+        String loader = settings.selectedLoader == null ? "vanilla" : settings.selectedLoader;
+        Integer javaMajor = detectJavaMajor(command.isEmpty() ? null : command.get(0));
+        LaunchSession session = new LaunchSession(paths.logsDir(), versionId, loader, javaMajor,
+                command.isEmpty() ? null : command.get(0), settings.maxRamMb, command);
+        listener.onMessage("Запуск: " + Redactor.renderCommand(command));
+        try {
+            return GameProcess.start(command, gameDir, onLine, onExit, session);
+        } catch (IOException e) {
+            session.close();
+            throw e;
+        }
+    }
+
+    private Integer detectJavaMajor(String executable) {
+        if (executable == null) return null;
+        String normalized = executable.replace('\\', '/');
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(?:jre|jdk)[-_]?(\\d{1,2})",
+                java.util.regex.Pattern.CASE_INSENSITIVE).matcher(normalized);
+        if (matcher.find()) {
+            try {
+                return Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private void verifyLocalInstallation(ResolvedVersion version) throws IOException {
+        Path client = paths.versionJar(version.jarVersionId);
+        if (!by.agro.launcher.core.HashUtil.verify(client,
+                version.clientDownload == null ? null : version.clientDownload.sha1)) {
+            throw new IOException("Offline launch blocked: client JAR is missing or failed integrity verification");
+        }
+        for (Library library : version.applicableLibraries(featureSet())) {
+            Library.Artifact artifact = library.resolveArtifact();
+            Path file = paths.librariesDir().resolve(library.relativePath());
+            if (!by.agro.launcher.core.HashUtil.verify(file, artifact == null ? null : artifact.sha1)) {
+                throw new IOException("Offline launch blocked: library is missing or invalid: " + library.name);
+            }
+        }
+        if (version.assetIndex != null && version.assetIndex.id != null) {
+            Path index = paths.assetIndexesDir().resolve(version.assetIndex.id + ".json");
+            if (!by.agro.launcher.core.HashUtil.verify(index, version.assetIndex.sha1)) {
+                throw new IOException("Offline launch blocked: asset index is missing or invalid");
+            }
+            com.google.gson.JsonObject objects = by.agro.launcher.core.Json.object(
+                    by.agro.launcher.core.Json.readObject(index), "objects");
+            if (objects != null) for (String key : objects.keySet()) {
+                String hash = by.agro.launcher.core.Json.string(objects.getAsJsonObject(key), "hash", null);
+                if (hash == null || hash.length() < 2 || !by.agro.launcher.core.HashUtil.verify(
+                        paths.assetObjectsDir().resolve(hash.substring(0, 2)).resolve(hash), hash)) {
+                    throw new IOException("Offline launch blocked: asset is missing or invalid: " + key);
+                }
+            }
+        }
+        if (version.chain.size() > 1 && !Files.isRegularFile(paths.versionJson(version.id))) {
+            throw new IOException("Offline launch blocked: loader profile is not installed locally");
+        }
+    }
+
+    private int countEnabledMods(Path gameDir) {
+        Path mods = (gameDir == null ? paths.gameDir() : gameDir).resolve("mods");
+        if (!Files.isDirectory(mods)) return 0;
+        try (var stream = Files.list(mods)) {
+            return (int) stream.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".jar"))
+                    .count();
+        } catch (IOException e) {
+            return 0;
+        }
     }
 
     private void downloadClientJar(ResolvedVersion version, ProgressListener listener) throws IOException {
         Path clientJar = paths.versionJar(version.jarVersionId);
         if (version.clientDownload == null || version.clientDownload.url == null) {
             if (!Files.exists(clientJar)) {
-                throw new IOException("Нет ссылки на клиентский jar и файл отсутствует: " + clientJar);
+                throw new IOException("No client JAR URL is available and the file is missing: " + clientJar);
             }
             return;
         }
