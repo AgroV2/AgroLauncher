@@ -5,7 +5,8 @@ public final class Account {
 
     public enum Type {
         OFFLINE("accounts.offline"),
-        ELY_BY(null);
+        ELY_BY(null),
+        ELY_BY_OAUTH(null);
 
         private final String nameKey;
 
@@ -39,8 +40,12 @@ public final class Account {
     
     public String login = "";
 
+    public String skinUrl = "";
+
     
     public long tokenUpdatedAt;
+
+    public long tokenExpiresAt;
 
     public Account() {
     }

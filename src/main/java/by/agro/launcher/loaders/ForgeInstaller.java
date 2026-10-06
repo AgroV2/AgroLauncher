@@ -183,7 +183,8 @@ public class ForgeInstaller implements LoaderInstaller {
                 return null;
             }
             String inherited = Json.string(profile, "inheritsFrom", null);
-            if (inherited != null && !Files.isRegularFile(paths.versionJson(inherited))) {
+            if (inherited != null && (!Files.isRegularFile(paths.versionJson(inherited))
+                    || !Files.isRegularFile(paths.versionJar(inherited)))) {
                 return null;
             }
             listener.onMessage("Generated profile выбран: " + versionId);

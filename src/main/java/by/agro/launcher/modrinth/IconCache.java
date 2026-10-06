@@ -1,6 +1,7 @@
 package by.agro.launcher.modrinth;
 
 import by.agro.launcher.core.LauncherPaths;
+import by.agro.launcher.core.SafeNetwork;
 
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
@@ -100,8 +101,10 @@ public final class IconCache {
     }
 
     private BufferedImage download(String url) throws IOException {
-        URI current = requireHttps(url);
+        URI current = SafeNetwork.requirePublicHttps(url);
         for (int redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
+            
+            SafeNetwork.validateResolvedAddresses(current);
             HttpURLConnection connection = (HttpURLConnection) current.toURL().openConnection();
             connection.setRequestProperty("User-Agent", "AgroLauncher/1.0");
             connection.setConnectTimeout(12_000);
@@ -114,7 +117,7 @@ public final class IconCache {
                 if (location == null || location.isBlank()) {
                     throw new IOException("Icon redirect has no Location header");
                 }
-                current = requireHttps(current.resolve(location).toString());
+                current = SafeNetwork.resolvePublicHttps(current, location);
                 continue;
             }
             if (code < 200 || code >= 300) {
@@ -134,18 +137,6 @@ public final class IconCache {
             }
         }
         throw new IOException("Too many icon redirects");
-    }
-
-    private static URI requireHttps(String url) throws IOException {
-        try {
-            URI uri = URI.create(url);
-            if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
-                throw new IOException("Only HTTPS icon URLs are allowed: " + url);
-            }
-            return uri;
-        } catch (IllegalArgumentException e) {
-            throw new IOException("Invalid icon URL: " + url, e);
-        }
     }
 
     private static final class LimitedInputStream extends java.io.FilterInputStream {

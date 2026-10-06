@@ -2,6 +2,7 @@ package by.agro.launcher.launch;
 
 import by.agro.launcher.diagnostics.DiagnosticReport;
 import by.agro.launcher.diagnostics.LaunchSession;
+import by.agro.launcher.i18n.Strings;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -52,7 +53,8 @@ public final class GameProcess {
                 }
             } catch (IOException e) {
                 if (onLine != null) {
-                    onLine.accept("[лаунчер] Поток вывода закрыт: " + e.getMessage());
+                    onLine.accept(Strings.get("console.launcherPrefix") + " "
+                            + Strings.get("console.outputClosed", e.getMessage()));
                 }
             } finally {
                 try {

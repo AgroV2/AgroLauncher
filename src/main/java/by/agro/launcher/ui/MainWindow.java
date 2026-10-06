@@ -9,11 +9,14 @@ import by.agro.launcher.ui.components.NavIcon;
 import by.agro.launcher.ui.components.SideNavButton;
 import by.agro.launcher.ui.components.UiFactory;
 import by.agro.launcher.ui.panels.AccountsPanel;
+import by.agro.launcher.ui.panels.AboutPanel;
 import by.agro.launcher.ui.panels.ModsPanel;
 import by.agro.launcher.ui.panels.PlayPanel;
 import by.agro.launcher.ui.panels.SettingsPanel;
 import by.agro.launcher.ui.panels.VersionsPanel;
 import by.agro.launcher.ui.theme.AgroTheme;
+import by.agro.launcher.update.UpdateChecker;
+import by.agro.launcher.Main;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -42,6 +45,7 @@ public final class MainWindow extends JFrame {
     private static final String CARD_ACCOUNTS = "accounts";
     private static final String CARD_MODS = "mods";
     private static final String CARD_SETTINGS = "settings";
+    private static final String CARD_ABOUT = "about";
 
 
     private static final int MAX_STATUS_LENGTH = 110;
@@ -68,6 +72,7 @@ public final class MainWindow extends JFrame {
     private AccountsPanel accountsPanel;
     private ModsPanel modsPanel;
     private SettingsPanel settingsPanel;
+    private AboutPanel aboutPanel;
 
     public MainWindow(LauncherContext context) {
         this.context = context;
@@ -114,13 +119,34 @@ public final class MainWindow extends JFrame {
                 offlineWarningLabel.setText(Strings.get("app.offlineOnly"));
             }
             if (versionLabel != null) {
-                versionLabel.setText(Strings.get("app.version", "1.0.0"));
+                versionLabel.setText(Strings.get("app.version", Main.VERSION));
             }
             statusLabel.setText(Strings.get("app.ready"));
             rebuildPanels();
         }));
 
         showCard(CARD_PLAY);
+        checkForUpdates();
+    }
+
+    private void checkForUpdates() {
+        if (context.settings().githubRepository == null || context.settings().githubRepository.isBlank()) return;
+        new javax.swing.SwingWorker<UpdateChecker.Release, Void>() {
+            protected UpdateChecker.Release doInBackground() throws Exception {
+                return UpdateChecker.latest(context.downloader(), context.settings().githubRepository, Main.VERSION);
+            }
+            protected void done() {
+                try {
+                    UpdateChecker.Release release = get();
+                    if (release == null) return;
+                    int answer = JOptionPane.showConfirmDialog(MainWindow.this,
+                            Strings.get("update.available", release.version()),
+                            Strings.get("update.title"), JOptionPane.YES_NO_OPTION);
+                    if (answer == JOptionPane.YES_OPTION && java.awt.Desktop.isDesktopSupported())
+                        java.awt.Desktop.getDesktop().browse(java.net.URI.create(release.pageUrl()));
+                } catch (Exception e) { setStatus(Strings.get("update.checkFailed", e.getMessage())); }
+            }
+        }.execute();
     }
 
     private void buildPanels() {
@@ -137,6 +163,7 @@ public final class MainWindow extends JFrame {
                     playPanel.refresh();
                 },
                 this::onAppearanceChanged);
+        aboutPanel = new AboutPanel(context.settings(), this::setStatus);
 
         cards.setBackground(AgroTheme.bgBase());
         cards.add(playPanel, CARD_PLAY);
@@ -144,6 +171,7 @@ public final class MainWindow extends JFrame {
         cards.add(accountsPanel, CARD_ACCOUNTS);
         cards.add(modsPanel, CARD_MODS);
         cards.add(settingsPanel, CARD_SETTINGS);
+        cards.add(aboutPanel, CARD_ABOUT);
     }
 
     private JComponent buildSidebar() {
@@ -161,6 +189,7 @@ public final class MainWindow extends JFrame {
         sidebar.add(navButton("nav.accounts", NavIcon.Kind.ACCOUNTS, CARD_ACCOUNTS));
         sidebar.add(navButton("nav.mods", NavIcon.Kind.MODS, CARD_MODS));
         sidebar.add(navButton("nav.settings", NavIcon.Kind.SETTINGS, CARD_SETTINGS));
+        sidebar.add(navButton("nav.about", NavIcon.Kind.ABOUT, CARD_ABOUT));
 
         sidebar.add(javax.swing.Box.createVerticalGlue());
         sidebar.add(buildSidebarFooter());
@@ -205,7 +234,7 @@ public final class MainWindow extends JFrame {
         footer.setLayout(new BoxLayout(footer, BoxLayout.Y_AXIS));
         footer.setBorder(BorderFactory.createEmptyBorder(10, 20, 18, 20));
 
-        JLabel version = new JLabel(Strings.get("app.version", "1.0.0"));
+        JLabel version = new JLabel(Strings.get("app.version", Main.VERSION));
         versionLabel = version;
         version.setFont(AgroTheme.font(10));
         version.setForeground(AgroTheme.textMuted());

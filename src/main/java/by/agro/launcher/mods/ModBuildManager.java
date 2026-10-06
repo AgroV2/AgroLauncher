@@ -4,11 +4,17 @@ import by.agro.launcher.core.Json;
 import by.agro.launcher.core.LauncherPaths;
 import by.agro.launcher.i18n.Strings;
 import by.agro.launcher.loaders.LoaderType;
+import by.agro.launcher.repair.RepairService;
 
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -68,20 +74,52 @@ public final class ModBuildManager {
 
         Path targetMods = modsDir(build);
         Files.createDirectories(targetMods);
-        if (Files.isDirectory(paths.modsDir())) {
+        List<String> copied = new ArrayList<>();
+        if (Files.isDirectory(paths.modsDir(), LinkOption.NOFOLLOW_LINKS)
+                && !Files.isSymbolicLink(paths.modsDir())) {
             try (var stream = Files.list(paths.modsDir())) {
-                for (Path source : stream.filter(Files::isRegularFile).toList()) {
+                for (Path source : stream.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                        && !Files.isSymbolicLink(path)).toList()) {
                     String fileName = source.getFileName().toString().toLowerCase();
                     if (fileName.endsWith(".jar") || fileName.endsWith(".jar.disabled")) {
                         Files.copy(source, targetMods.resolve(source.getFileName()),
-                                StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                                StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES,
+                                LinkOption.NOFOLLOW_LINKS);
+                        copied.add(source.getFileName().toString());
                         build.files++;
                     }
                 }
             }
         }
+        copyManagedMetadataSnapshot(gameDir(build), copied);
         Json.write(buildDir(build).resolve(METADATA), build);
         return build;
+    }
+
+    private void copyManagedMetadataSnapshot(Path targetGameDir, List<String> copied) throws IOException {
+        Path source = paths.gameDir().resolve(".agrolauncher-managed-mods.json");
+        if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(source)) return;
+        RepairService.ManagedMods original = Json.read(source, RepairService.ManagedMods.class);
+        if (original == null || original.mods == null) return;
+        RepairService.ManagedMods filtered = new RepairService.ManagedMods();
+        for (RepairService.ManagedMod mod : original.mods) {
+            if (mod == null || mod.fileName == null) continue;
+            String enabled = mod.fileName;
+            String disabled = enabled + ".disabled";
+            String actual = copied.stream().filter(name -> name.equals(enabled) || name.equals(disabled))
+                    .findFirst().orElse(null);
+            if (actual == null) continue;
+            RepairService.ManagedMod snapshot = new RepairService.ManagedMod();
+            snapshot.fileName = mod.fileName;
+            snapshot.url = mod.url;
+            snapshot.sha1 = mod.sha1;
+            snapshot.size = mod.size;
+            snapshot.disabled = actual.endsWith(".disabled");
+            filtered.mods.add(snapshot);
+        }
+        if (!filtered.mods.isEmpty()) {
+            Json.write(targetGameDir.resolve(".agrolauncher-managed-mods.json"), filtered);
+        }
     }
 
     public List<ModBuild> list() {
@@ -107,13 +145,45 @@ public final class ModBuildManager {
     }
 
     public void delete(ModBuild build) throws IOException {
-        Path dir = buildDir(build);
-        if (!Files.exists(dir)) return;
-        try (var stream = Files.walk(dir)) {
-            for (Path path : stream.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(path);
+        Path dir = validatedBuildDir(build);
+        if (!Files.exists(dir, LinkOption.NOFOLLOW_LINKS)) return;
+        Files.walkFileTree(dir, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
             }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path directory, IOException error) throws IOException {
+                if (error != null) throw error;
+                Files.delete(directory);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private Path validatedBuildDir(ModBuild build) throws IOException {
+        if (build == null || build.id == null || build.id.isBlank()) {
+            throw new IOException("Build ID is not specified");
         }
+        Path id;
+        try {
+            id = Paths.get(build.id);
+        } catch (RuntimeException e) {
+            throw new IOException("Invalid build ID", e);
+        }
+        if (id.isAbsolute() || id.getNameCount() != 1
+                || ".".equals(build.id) || "..".equals(build.id)
+                || build.id.indexOf('/') >= 0 || build.id.indexOf('\\') >= 0) {
+            throw new IOException("Unsafe build ID");
+        }
+        Path root = buildsDir().toAbsolutePath().normalize();
+        Path dir = root.resolve(id).normalize();
+        if (!root.equals(dir.getParent())) {
+            throw new IOException("Build directory must be directly inside mod-builds");
+        }
+        return dir;
     }
 
     public Path gameDir(ModBuild build) {

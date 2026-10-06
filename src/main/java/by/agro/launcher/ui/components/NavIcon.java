@@ -19,7 +19,8 @@ public final class NavIcon implements Icon {
         VERSIONS,
         ACCOUNTS,
         MODS,
-        SETTINGS
+        SETTINGS,
+        ABOUT
     }
 
     private final Kind kind;
@@ -72,6 +73,9 @@ public final class NavIcon implements Icon {
                 break;
             case SETTINGS:
                 paintSettings(g2);
+                break;
+            case ABOUT:
+                paintAbout(g2);
                 break;
             default:
                 break;
@@ -149,6 +153,16 @@ public final class NavIcon implements Icon {
         right.lineTo(center + half, center + quarter * 0.72f);
         right.closePath();
         g2.draw(right);
+    }
+
+    private void paintAbout(Graphics2D g2) {
+        float inset = size * 0.14f;
+        g2.draw(new Ellipse2D.Float(inset, inset, size - inset * 2, size - inset * 2));
+        float center = size / 2f;
+        float dot = Math.max(1.8f, size * 0.12f);
+        g2.fill(new Ellipse2D.Float(center - dot / 2f, size * 0.29f, dot, dot));
+        g2.drawLine(Math.round(center), Math.round(size * 0.48f),
+                Math.round(center), Math.round(size * 0.72f));
     }
 
     private void paintSettings(Graphics2D g2) {

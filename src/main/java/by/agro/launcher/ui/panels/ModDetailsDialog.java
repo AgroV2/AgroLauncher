@@ -40,6 +40,7 @@ public final class ModDetailsDialog extends JDialog {
     private final ModrinthClient client;
     private final ModInstaller installer;
     private final LauncherContext context;
+    private final String projectType;
     private final String loaderFilter;
     private final String versionFilter;
     private final Consumer<String> onInstalled;
@@ -50,19 +51,21 @@ public final class ModDetailsDialog extends JDialog {
     private final JTextArea descriptionArea = new JTextArea();
     private final JLabel versionInfoLabel = new JLabel(" ");
     private final JLabel dependencyLabel = new JLabel(" ");
-    private final JButton installButton = UiFactory.primaryButton(Strings.get("modDialog.install"));
+    private final JButton installButton;
     private final JProgressBar progressBar = new JProgressBar();
     private final JLabel progressLabel = new JLabel(" ");
 
     public ModDetailsDialog(Window owner, ModrinthProject project, ModrinthClient client,
                             ModInstaller installer, LauncherContext context,
-                            String loaderFilter, String versionFilter,
+                            String projectType, String loaderFilter, String versionFilter,
                             Consumer<String> onInstalled) {
         super(owner, project.title, ModalityType.APPLICATION_MODAL);
         this.project = project;
         this.client = client;
         this.installer = installer;
         this.context = context;
+        this.projectType = normalizeProjectType(projectType);
+        this.installButton = UiFactory.primaryButton(Strings.get(typeKey("install")));
         this.loaderFilter = loaderFilter;
         this.versionFilter = versionFilter;
         this.onInstalled = onInstalled;
@@ -80,6 +83,17 @@ public final class ModDetailsDialog extends JDialog {
 
         setContentPane(root);
         loadDetails();
+    }
+
+    private static String normalizeProjectType(String projectType) {
+        return switch (projectType) {
+            case "resourcepack", "shader" -> projectType;
+            default -> "mod";
+        };
+    }
+
+    private String typeKey(String action) {
+        return "modDialog." + action + "." + projectType;
     }
 
     private JComponent buildHeader() {
@@ -294,8 +308,8 @@ public final class ModDetailsDialog extends JDialog {
             dependencyLabel.setText(" ");
         }
 
-        boolean alreadyInstalled = installer.isInstalled(version);
-        installButton.setText(alreadyInstalled ? Strings.get("modDialog.alreadyInstalled") : Strings.get("modDialog.install"));
+        boolean alreadyInstalled = installer.isInstalled(version, projectType);
+        installButton.setText(alreadyInstalled ? Strings.get("modDialog.alreadyInstalled") : Strings.get(typeKey("install")));
         installButton.setEnabled(!alreadyInstalled);
     }
 
@@ -307,7 +321,7 @@ public final class ModDetailsDialog extends JDialog {
 
         installButton.setEnabled(false);
         progressBar.setVisible(true);
-        progressLabel.setText(Strings.get("modDialog.installing"));
+        progressLabel.setText(Strings.get(typeKey("installing")));
 
         ProgressListener listener = new ProgressListener() {
             @Override
@@ -327,7 +341,7 @@ public final class ModDetailsDialog extends JDialog {
         new SwingWorker<ModInstaller.Result, Void>() {
             @Override
             protected ModInstaller.Result doInBackground() throws Exception {
-                return installer.install(version, loaderFilter, versionFilter, dependencies, listener);
+                return installer.install(version, projectType, loaderFilter, versionFilter, dependencies, listener);
             }
 
             @Override
@@ -340,7 +354,7 @@ public final class ModDetailsDialog extends JDialog {
                         onInstalled.accept(project.title + ": " + result.summary());
                     }
                     if (result.failed.isEmpty()) {
-                        installButton.setText(Strings.get("modDialog.installed"));
+                        installButton.setText(Strings.get(typeKey("installed")));
                     } else {
                         installButton.setEnabled(true);
                         progressLabel.setText(result.summary() + " — " + result.failed.get(0));

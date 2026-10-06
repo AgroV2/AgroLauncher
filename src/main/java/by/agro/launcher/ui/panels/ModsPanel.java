@@ -42,12 +42,15 @@ public final class ModsPanel extends JPanel {
 
     private final JTabbedPane tabs = new JTabbedPane();
     private final ModBrowserPanel browserPanel;
+    private final ModBrowserPanel resourcePacksPanel;
+    private final ModBrowserPanel shadersPanel;
 
     private final DefaultListModel<ModManager.ModFile> model = new DefaultListModel<>();
     private final JList<ModManager.ModFile> modsList = new JList<>(model);
     private final JLabel summaryLabel = new JLabel();
     private final JLabel loaderWarning = new JLabel(" ");
     private final JComboBox<ModBuildManager.ModBuild> buildsCombo = new JComboBox<>();
+    private final JButton deleteBuildButton = UiFactory.dangerButton(Strings.get("builds.delete"));
 
     public ModsPanel(LauncherContext context, Consumer<String> statusReporter) {
         this.context = context;
@@ -59,7 +62,9 @@ public final class ModsPanel extends JPanel {
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createEmptyBorder(26, 30, 26, 30));
 
-        browserPanel = new ModBrowserPanel(context, statusReporter, this::refresh);
+        browserPanel = new ModBrowserPanel(context, statusReporter, this::refresh, "mod");
+        resourcePacksPanel = new ModBrowserPanel(context, statusReporter, this::refresh, "resourcepack");
+        shadersPanel = new ModBrowserPanel(context, statusReporter, this::refresh, "shader");
 
         add(buildHeader(), BorderLayout.NORTH);
         add(buildTabs(), BorderLayout.CENTER);
@@ -108,10 +113,17 @@ public final class ModsPanel extends JPanel {
     private JComponent buildTabs() {
         tabs.setOpaque(false);
         tabs.addTab(Strings.get("mods.catalog"), browserPanel);
+        tabs.addTab(Strings.get("mods.resourcePacks"), resourcePacksPanel);
+        tabs.addTab(Strings.get("mods.shaders"), shadersPanel);
         tabs.addTab(Strings.get("mods.installed"), buildInstalledSection());
         tabs.addChangeListener(e -> {
-            if (tabs.getSelectedIndex() == 0) {
+            Component selected = tabs.getSelectedComponent();
+            if (selected == browserPanel) {
                 browserPanel.refreshFilters();
+            } else if (selected == resourcePacksPanel) {
+                resourcePacksPanel.refreshFilters();
+            } else if (selected == shadersPanel) {
+                shadersPanel.refreshFilters();
             } else {
                 refresh();
             }
@@ -154,18 +166,25 @@ public final class ModsPanel extends JPanel {
         actions.add(openButton);
         actions.add(refreshButton);
 
-        JPanel builds = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        builds.setOpaque(false);
-        builds.add(new JLabel(Strings.get("builds.independent")));
-        buildsCombo.setPreferredSize(new java.awt.Dimension(360, 34));
-        buildsCombo.addActionListener(e -> selectBuild());
+        JPanel builds = UiFactory.transparentPanel();
+        builds.setLayout(new BorderLayout(8, 0));
+        builds.add(new JLabel(Strings.get("builds.independent")), BorderLayout.WEST);
+
+        JPanel buildControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        buildControls.setOpaque(false);
+        buildsCombo.setPreferredSize(new java.awt.Dimension(300, 34));
+        buildsCombo.addActionListener(e -> {
+            deleteBuildButton.setEnabled(buildsCombo.getSelectedItem() != null);
+            selectBuild();
+        });
         JButton createBuild = UiFactory.primaryButton(Strings.get("builds.createSnapshot"));
         createBuild.addActionListener(e -> createBuild());
-        JButton deleteBuild = UiFactory.dangerButton(Strings.get("builds.delete"));
-        deleteBuild.addActionListener(e -> deleteBuild());
-        builds.add(buildsCombo);
-        builds.add(createBuild);
-        builds.add(deleteBuild);
+        deleteBuildButton.setEnabled(false);
+        deleteBuildButton.addActionListener(e -> deleteBuild());
+        buildControls.add(buildsCombo);
+        buildControls.add(deleteBuildButton);
+        buildControls.add(createBuild);
+        builds.add(buildControls, BorderLayout.CENTER);
 
         JPanel bottom = UiFactory.transparentPanel();
         bottom.setLayout(new BorderLayout(0, 10));
@@ -209,6 +228,7 @@ public final class ModsPanel extends JPanel {
             buildsCombo.addItem(build);
             if (build.id.equals(selectedId)) buildsCombo.setSelectedItem(build);
         }
+        deleteBuildButton.setEnabled(buildsCombo.getSelectedItem() != null);
     }
 
     private void createBuild() {
@@ -250,12 +270,14 @@ public final class ModsPanel extends JPanel {
             buildManager.delete(build);
             if (build.id.equals(context.settings().selectedModBuildId)) {
                 context.settings().selectedModBuildId = "";
-                context.settings().save();
             }
+            context.settings().save();
             reloadBuilds();
+            report(Strings.get("builds.deleted", build.name));
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(this, e.getMessage(), Strings.get("common.error"),
-                    JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this,
+                    Strings.get("builds.deleteFailed", build.name, e.getMessage()),
+                    Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
         }
     }
 
@@ -270,8 +292,8 @@ public final class ModsPanel extends JPanel {
             }
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
-                    "Не удалось открыть браузер: " + e.getMessage(),
-                    "Ошибка", JOptionPane.WARNING_MESSAGE);
+                    Strings.get("mods.openBrowserFailed", e.getMessage()),
+                    Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
         }
     }
 

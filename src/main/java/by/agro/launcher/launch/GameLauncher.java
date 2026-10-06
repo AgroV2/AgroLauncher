@@ -64,6 +64,11 @@ public final class GameLauncher {
 
     public List<String> prepare(String versionId, Account account, VersionManifest manifest,
                                ProgressListener listener, Path launchGameDir) throws IOException {
+        return prepareLaunch(versionId, account, manifest, listener, launchGameDir).command();
+    }
+
+    private PreparedLaunch prepareLaunch(String versionId, Account account, VersionManifest manifest,
+                                         ProgressListener listener, Path launchGameDir) throws IOException {
         paths.ensureDirectories();
 
         listener.onMessage(Strings.get("progress.versionPrepare", versionId));
@@ -118,7 +123,7 @@ public final class GameLauncher {
 
         List<String> command = commandBuilder.build(options);
         listener.onProgress(Strings.get("progress.done"), 1, 1, Strings.get("progress.commandReady"));
-        return command;
+        return new PreparedLaunch(command, javaSelection);
     }
 
     
@@ -133,13 +138,18 @@ public final class GameLauncher {
                               ProgressListener listener, Consumer<String> onLine, IntConsumer onExit,
                               Path launchGameDir) throws IOException {
         Path gameDir = launchGameDir != null ? launchGameDir : paths.gameDir();
-        List<String> command = prepare(versionId, account, manifest, listener, gameDir);
+        PreparedLaunch prepared = prepareLaunch(versionId, account, manifest, listener, gameDir);
+        List<String> command = prepared.command();
 
         String loader = settings.selectedLoader == null ? "vanilla" : settings.selectedLoader;
         Integer javaMajor = detectJavaMajor(command.isEmpty() ? null : command.get(0));
         LaunchSession session = new LaunchSession(paths.logsDir(), versionId, loader, javaMajor,
                 command.isEmpty() ? null : command.get(0), settings.maxRamMb, command);
         listener.onMessage("Запуск: " + Redactor.renderCommand(command));
+        String javaWarning = JavaRuntimeWarning.forSelection(prepared.javaSelection());
+        if (javaWarning != null && onLine != null) {
+            onLine.accept(javaWarning);
+        }
         try {
             return GameProcess.start(command, gameDir, onLine, onExit, session);
         } catch (IOException e) {
@@ -236,6 +246,9 @@ public final class GameLauncher {
 
         listener.onMessage(Strings.get("progress.librariesCount", tasks.size()));
         downloader.downloadAll(tasks, Strings.get("progress.libraries"), listener);
+    }
+
+    private record PreparedLaunch(List<String> command, JavaSelection javaSelection) {
     }
 
     public VersionResolver resolver() {

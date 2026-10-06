@@ -50,20 +50,21 @@ public final class ModInstaller {
         }
     }
 
-    public Result install(ModrinthVersion version, String loader, String gameVersion,
+    public Result install(ModrinthVersion version, String projectType, String loader, String gameVersion,
                           boolean withDependencies, ProgressListener listener) throws IOException {
         Result result = new Result();
         Set<String> visited = new HashSet<>();
-        Path modsDir = paths.modsDir();
-        Files.createDirectories(modsDir);
+        Path destination = destinationFor(projectType);
+        Files.createDirectories(destination);
 
-        installRecursive(version, loader, gameVersion, withDependencies,
+        installRecursive(version, projectType, destination, loader, gameVersion, withDependencies,
                 visited, result, listener, 0);
         return result;
     }
 
-    private void installRecursive(ModrinthVersion version, String loader, String gameVersion,
-                                  boolean withDependencies, Set<String> visited, Result result,
+    private void installRecursive(ModrinthVersion version, String projectType, Path destination,
+                                  String loader, String gameVersion, boolean withDependencies,
+                                  Set<String> visited, Result result,
                                   ProgressListener listener, int depth) {
         if (version == null || depth > MAX_DEPTH) {
             return;
@@ -81,8 +82,8 @@ public final class ModInstaller {
         final Path target;
         final Path disabled;
         try {
-            target = safeModPath(file.filename);
-            disabled = safeModPath(file.filename + ".disabled");
+            target = safeDestinationPath(destination, file.filename);
+            disabled = safeDestinationPath(destination, file.filename + ".disabled");
         } catch (IllegalArgumentException e) {
             result.failed.add(file.filename + ": " + e.getMessage());
             listener.onMessage(by.agro.launcher.i18n.Strings.get("install.downloadFailed", file.filename, e.getMessage()));
@@ -124,7 +125,7 @@ public final class ModInstaller {
                     continue;
                 }
                 listener.onMessage(by.agro.launcher.i18n.Strings.get("install.fetchingDep", dependencyVersion.versionNumber));
-                installRecursive(dependencyVersion, loader, gameVersion, true,
+                installRecursive(dependencyVersion, projectType, destination, loader, gameVersion, true,
                         visited, result, listener, depth + 1);
             } catch (IOException e) {
                 result.failed.add("зависимость " + dependency.projectId + ": " + e.getMessage());
@@ -133,16 +134,26 @@ public final class ModInstaller {
         }
     }
 
-    private Path safeModPath(String filename) {
+    private Path destinationFor(String projectType) {
+        return switch (projectType) {
+            case "mod" -> paths.gameDir().resolve("mods");
+            case "resourcepack" -> paths.gameDir().resolve("resourcepacks");
+            case "shader" -> paths.gameDir().resolve("shaderpacks");
+            default -> throw new IllegalArgumentException(
+                    "Unknown Modrinth project type: " + projectType);
+        };
+    }
+
+    private Path safeDestinationPath(Path destination, String filename) {
         if (filename == null || filename.isBlank()) {
-            throw new IllegalArgumentException("Mod filename is not specified");
+            throw new IllegalArgumentException("Project filename is not specified");
         }
-        Path modsRoot = paths.modsDir().toAbsolutePath().normalize();
-        Path target = modsRoot.resolve(filename).normalize();
-        if (Path.of(filename).isAbsolute() || !target.startsWith(modsRoot)
+        Path destinationRoot = destination.toAbsolutePath().normalize();
+        Path target = destinationRoot.resolve(filename).normalize();
+        if (Path.of(filename).isAbsolute() || !target.startsWith(destinationRoot)
                 || Path.of(filename).getNameCount() != 1
                 || filename.indexOf('/') >= 0 || filename.indexOf('\\') >= 0) {
-            throw new IllegalArgumentException("Unsafe mod filename: " + filename);
+            throw new IllegalArgumentException("Unsafe project filename: " + filename);
         }
         return target;
     }
@@ -183,14 +194,15 @@ public final class ModInstaller {
         return versions.get(0);
     }
 
-    public boolean isInstalled(ModrinthVersion version) {
+    public boolean isInstalled(ModrinthVersion version, String projectType) {
         ModrinthVersion.File file = version.primaryFile();
         if (file == null) {
             return false;
         }
+        Path destination = destinationFor(projectType);
         try {
-            return Files.exists(safeModPath(file.filename))
-                    || Files.exists(safeModPath(file.filename + ".disabled"));
+            return Files.exists(safeDestinationPath(destination, file.filename))
+                    || Files.exists(safeDestinationPath(destination, file.filename + ".disabled"));
         } catch (IllegalArgumentException e) {
             return false;
         }

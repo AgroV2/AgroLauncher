@@ -217,15 +217,13 @@ public final class LaunchCommandBuilder {
             entries.add(jar.toAbsolutePath().normalize().toString());
         }
 
-        if (version.chain.size() == 1) {
-            Path clientJar = paths.versionJar(version.jarVersionId);
-            if (Files.exists(clientJar)) {
-                entries.add(clientJar.toAbsolutePath().normalize().toString());
-            } else {
-                Path fallback = paths.versionJar(version.id);
-                if (Files.exists(fallback)) {
-                    entries.add(fallback.toAbsolutePath().normalize().toString());
-                }
+        Path clientJar = paths.versionJar(version.jarVersionId);
+        if (Files.exists(clientJar)) {
+            entries.add(clientJar.toAbsolutePath().normalize().toString());
+        } else {
+            Path fallback = paths.versionJar(version.id);
+            if (Files.exists(fallback)) {
+                entries.add(fallback.toAbsolutePath().normalize().toString());
             }
         }
 

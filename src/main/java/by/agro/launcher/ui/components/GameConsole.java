@@ -1,5 +1,6 @@
 package by.agro.launcher.ui.components;
 
+import by.agro.launcher.i18n.Strings;
 import by.agro.launcher.ui.theme.AgroTheme;
 
 import javax.swing.BorderFactory;
@@ -108,7 +109,8 @@ public final class GameConsole extends JPanel {
     }
 
     public void appendLauncherMessage(String message) {
-        SwingUtilities.invokeLater(() -> appendWithStyle("[лаунчер] " + message, styleLauncher));
+        SwingUtilities.invokeLater(() -> appendWithStyle(Strings.get("console.launcherPrefix") + " " + message,
+                styleLauncher));
     }
 
     private void appendInternal(String line) {
@@ -139,7 +141,8 @@ public final class GameConsole extends JPanel {
         if (upper.contains("/INFO") || upper.contains("[INFO]")) {
             return styleInfo;
         }
-        if (line.startsWith("[лаунчер]") || line.startsWith("[installer]") || line.startsWith("[optifine]")) {
+        if (line.startsWith(Strings.get("console.launcherPrefix"))
+                || line.startsWith("[installer]") || line.startsWith("[optifine]")) {
             return styleLauncher;
         }
         if (upper.contains("/DEBUG") || upper.contains("[DEBUG]") || upper.contains("/TRACE")) {

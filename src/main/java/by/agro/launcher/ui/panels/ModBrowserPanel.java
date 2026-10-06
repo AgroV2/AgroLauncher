@@ -50,6 +50,7 @@ public final class ModBrowserPanel extends JPanel {
     private final ModInstaller installer;
     private final Consumer<String> statusReporter;
     private final Runnable onModsChanged;
+    private final String projectType;
 
     private final JTextField searchField = new JTextField();
     private final JComboBox<String> categoryCombo = new JComboBox<>();
@@ -71,7 +72,13 @@ public final class ModBrowserPanel extends JPanel {
 
     public ModBrowserPanel(LauncherContext context, Consumer<String> statusReporter,
                            Runnable onModsChanged) {
+        this(context, statusReporter, onModsChanged, "mod");
+    }
+
+    public ModBrowserPanel(LauncherContext context, Consumer<String> statusReporter,
+                           Runnable onModsChanged, String projectType) {
         this.context = context;
+        this.projectType = projectType;
         this.client = new ModrinthClient(context.downloader());
         this.iconCache = new IconCache(context.paths());
         this.installer = new ModInstaller(context.paths(), context.downloader(), client);
@@ -110,8 +117,7 @@ public final class ModBrowserPanel extends JPanel {
         row.setOpaque(false);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
 
-        searchField.putClientProperty("JTextField.placeholderText",
-                Strings.get("browser.searchPlaceholder"));
+        updateSearchPlaceholder();
         UiFactory.fixHeight(searchField, 34);
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
@@ -240,7 +246,7 @@ public final class ModBrowserPanel extends JPanel {
         new SwingWorker<ModrinthClient.SearchResult, Void>() {
             @Override
             protected ModrinthClient.SearchResult doInBackground() throws Exception {
-                return client.search(query, loader, gameVersion, category, sort, offset, PAGE_SIZE);
+                return client.search(query, loader, gameVersion, category, projectType, sort, offset, PAGE_SIZE);
             }
 
             @Override
@@ -263,7 +269,7 @@ public final class ModBrowserPanel extends JPanel {
                     }
                 } catch (Exception e) {
                     Throwable cause = e.getCause() != null ? e.getCause() : e;
-                    String message = cause.getMessage() != null ? cause.getMessage() : "ошибка сети";
+                    String message = cause.getMessage() != null ? cause.getMessage() : Strings.get("common.networkError");
                     statusLabel.setText(Strings.get("browser.loadFailed", message));
                     report(Strings.get("browser.unavailable", message));
                 }
@@ -303,6 +309,7 @@ public final class ModBrowserPanel extends JPanel {
                 client,
                 installer,
                 context,
+                projectType,
                 resolveLoaderFilter(),
                 resolveVersionFilter(),
                 message -> {
@@ -315,6 +322,9 @@ public final class ModBrowserPanel extends JPanel {
     }
 
     private String resolveLoaderFilter() {
+        if (!"mod".equals(projectType)) {
+            return null;
+        }
         String loader = context.settings().selectedLoader;
         if (loader == null || loader.isBlank() || "vanilla".equalsIgnoreCase(loader)
                 || "optifine".equalsIgnoreCase(loader)) {
@@ -355,8 +365,18 @@ public final class ModBrowserPanel extends JPanel {
         filterInfoLabel.setText(sb.toString());
     }
 
+    private void updateSearchPlaceholder() {
+        searchField.putClientProperty("JTextField.placeholderText",
+                Strings.get("browser.searchPlaceholder." + projectType));
+        searchField.repaint();
+    }
+
     public void refreshFilters() {
+        updateSearchPlaceholder();
         updateFilterInfo();
+        if ("mod".equals(projectType)) {
+            reload();
+        }
     }
 
     private void report(String message) {

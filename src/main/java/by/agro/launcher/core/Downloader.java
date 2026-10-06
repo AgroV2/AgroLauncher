@@ -129,9 +129,9 @@ public final class Downloader {
                 : DEFAULT_MAX_DOWNLOAD_BYTES;
         IOException last = null;
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            Path temp = SecureFiles.createSiblingTemp(target, ".part");
+            Path temp = target.resolveSibling(target.getFileName() + ".partial");
             try {
-                transfer(url, temp, Map.of(), limit);
+                transferResumable(url, temp, Map.of(), limit);
                 if (expectedSha1 != null && !expectedSha1.isBlank()) {
                     String actual = HashUtil.sha1(temp);
                     if (!actual.equalsIgnoreCase(expectedSha1)) {
@@ -143,7 +143,6 @@ public final class Downloader {
                 return;
             } catch (IOException e) {
                 last = e;
-                Files.deleteIfExists(temp);
                 if (attempt < MAX_RETRIES) {
                     try {
                         Thread.sleep(500L * attempt);
@@ -152,8 +151,6 @@ public final class Downloader {
                         throw new IOException("Download interrupted", interrupted);
                     }
                 }
-            } finally {
-                Files.deleteIfExists(temp);
             }
         }
         throw new IOException("Failed to download " + url + " after " + MAX_RETRIES + " attempts", last);
@@ -214,6 +211,26 @@ public final class Downloader {
         }
     }
 
+    private void transferResumable(String url, Path target, Map<String, String> headers, long maxBytes) throws IOException {
+        Files.createDirectories(target.toAbsolutePath().normalize().getParent());
+        long offset = Files.exists(target) ? Files.size(target) : 0;
+        Map<String, String> requestHeaders = new java.util.LinkedHashMap<>(headers);
+        if (offset > 0) requestHeaders.put("Range", "bytes=" + offset + "-");
+        HttpURLConnection connection = openWithRedirects(url, requestHeaders);
+        int code = connection.getResponseCode();
+        boolean append = offset > 0 && code == HttpURLConnection.HTTP_PARTIAL;
+        if (!append) offset = 0;
+        long contentLength = connection.getContentLengthLong();
+        if (contentLength > 0 && offset + contentLength > maxBytes) {
+            connection.disconnect(); throw new IOException("Download exceeds size limit");
+        }
+        try (InputStream in = connection.getInputStream(); OutputStream out = Files.newOutputStream(target,
+                append ? new java.nio.file.StandardOpenOption[]{java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND}
+                        : new java.nio.file.StandardOpenOption[]{java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING})) {
+            copyLimited(in, out, maxBytes - offset);
+        } finally { connection.disconnect(); }
+    }
+
     private void transfer(String url, Path target, Map<String, String> headers, long maxBytes) throws IOException {
         HttpURLConnection connection = openWithRedirects(url, headers);
         long contentLength = connection.getContentLengthLong();
@@ -246,7 +263,7 @@ public final class Downloader {
     }
 
     private HttpURLConnection openWithRedirects(String url, Map<String, String> headers) throws IOException {
-        URI current = requireHttps(url);
+        URI current = SafeNetwork.requirePublicHttps(url);
         for (int i = 0; i < MAX_REDIRECTS; i++) {
             HttpURLConnection connection = open(current, headers);
             int code = connection.getResponseCode();
@@ -257,11 +274,7 @@ public final class Downloader {
                 if (location == null || location.isBlank()) {
                     throw new IOException("Redirect response has no Location header: " + current);
                 }
-                try {
-                    current = requireHttps(current.resolve(location).toString());
-                } catch (IllegalArgumentException e) {
-                    throw new IOException("Invalid redirect URL from " + current, e);
-                }
+                current = SafeNetwork.resolvePublicHttps(current, location);
                 continue;
             }
             if (code < 200 || code >= 300) {
@@ -274,6 +287,8 @@ public final class Downloader {
     }
 
     private HttpURLConnection open(URI uri, Map<String, String> headers) throws IOException {
+        
+        SafeNetwork.validateResolvedAddresses(uri);
         URL parsed = uri.toURL();
         HttpURLConnection connection = (HttpURLConnection) parsed.openConnection();
         connection.setInstanceFollowRedirects(false);
@@ -293,19 +308,6 @@ public final class Downloader {
             }
         }
         return connection;
-    }
-
-    private static URI requireHttps(String url) throws IOException {
-        final URI uri;
-        try {
-            uri = URI.create(url);
-        } catch (IllegalArgumentException e) {
-            throw new IOException("Invalid URL: " + url, e);
-        }
-        if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
-            throw new IOException("Only absolute HTTPS URLs are allowed: " + url);
-        }
-        return uri;
     }
 
     private void collectCookies(HttpURLConnection connection, URI origin) {

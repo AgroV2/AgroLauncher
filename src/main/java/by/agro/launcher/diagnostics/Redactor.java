@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 public final class Redactor {
     private static final String HIDDEN = "<redacted>";
     private static final Pattern BEARER = Pattern.compile("(?i)(bearer\\s+)[^\\s,;]+", Pattern.CASE_INSENSITIVE);
-    private static final Pattern JSON_SECRET = Pattern.compile("(?i)(\\\"?(?:access[_-]?token|refresh[_-]?token|password|cookie|authorization)\\\"?\\s*[:=]\\s*\\\"?)[^\\\"\\s,}]+", Pattern.CASE_INSENSITIVE);
+    private static final Pattern JSON_SECRET = Pattern.compile("(?i)(\\\"?(?:access[_-]?token|refresh[_-]?token|client[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret|password|passphrase|secret|cookie|authorization|totp|otp|code[_-]?verifier)\\\"?\\s*[:=]\\s*\\\"?)[^\\\"\\s,}]+", Pattern.CASE_INSENSITIVE);
     private static final Pattern UUID = Pattern.compile("(?i)\\b[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}\\b");
     private static final Pattern UNIX_HOME = Pattern.compile("(?i)(?:/home/|/users/)[^/\\s]+(?:/[^\\s:;,'\\\"]*)?");
     private static final Pattern WINDOWS_HOME = Pattern.compile("(?i)[a-z]:\\\\users\\\\[^\\\\\\s]+(?:\\\\[^\\s:;,'\\\"]*)?");
@@ -59,14 +59,23 @@ public final class Redactor {
         return value.equals("--accesstoken") || value.equals("--access-token")
                 || value.equals("--uuid") || value.equals("--userproperties")
                 || value.equals("--clientid") || value.equals("--xuid")
-                || value.equals("--password") || value.equals("--authorization")
-                || value.equals("--cookie");
+                || value.equals("--password") || value.equals("--passphrase")
+                || value.equals("--authorization") || value.equals("--cookie")
+                || value.equals("--refreshtoken") || value.equals("--refresh-token")
+                || value.equals("--clientsecret") || value.equals("--client-secret")
+                || value.equals("--apikey") || value.equals("--api-key")
+                || value.equals("--totp") || value.equals("--otp");
     }
 
     private static boolean containsSensitiveAssignment(String value) {
         return value.contains("accesstoken=") || value.contains("access_token=")
-                || value.contains("password=") || value.contains("authorization=")
-                || value.contains("cookie=") || value.contains("token:");
+                || value.contains("refreshtoken=") || value.contains("refresh_token=")
+                || value.contains("clienttoken=") || value.contains("client_token=")
+                || value.contains("clientsecret=") || value.contains("client_secret=")
+                || value.contains("apikey=") || value.contains("api_key=")
+                || value.contains("password=") || value.contains("passphrase=")
+                || value.contains("authorization=") || value.contains("cookie=")
+                || value.contains("totp=") || value.contains("otp=") || value.contains("token:");
     }
 
     private static String redactPathArgument(String value) {

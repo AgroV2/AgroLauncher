@@ -2,13 +2,14 @@ package by.agro.launcher.version;
 
 import by.agro.launcher.core.LauncherPaths;
 import by.agro.launcher.core.ProgressListener;
+import by.agro.launcher.core.SecureFiles;
 import by.agro.launcher.i18n.Strings;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -70,16 +71,29 @@ public final class NativesExtractor {
                 if (fileName.isEmpty()) {
                     continue;
                 }
-                Path target = targetDir.resolve(fileName);
-                
-                if (!target.normalize().startsWith(targetDir.normalize())) {
+                Path normalizedDir = targetDir.toAbsolutePath().normalize();
+                Path target = normalizedDir.resolve(fileName).normalize();
+                if (!target.startsWith(normalizedDir)) {
                     continue;
                 }
-                if (Files.exists(target) && Files.size(target) == entry.getSize()) {
+
+                SecureFiles.rejectSymlinkParents(normalizedDir);
+                SecureFiles.rejectSymbolicLink(target, "Native destination");
+                if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)
+                        && Files.size(target) == entry.getSize()) {
                     continue;
                 }
-                try (InputStream in = zip.getInputStream(entry)) {
-                    Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+
+                Path temporary = SecureFiles.createSiblingTemp(target, ".native");
+                try {
+                    try (InputStream in = zip.getInputStream(entry)) {
+                        Files.copy(in, temporary, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    SecureFiles.rejectSymlinkParents(normalizedDir);
+                    SecureFiles.rejectSymbolicLink(target, "Native destination");
+                    SecureFiles.atomicReplace(temporary, target);
+                } finally {
+                    Files.deleteIfExists(temporary);
                 }
                 makeExecutableIfNeeded(target);
             }

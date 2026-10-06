@@ -83,6 +83,19 @@ public final class Settings {
     public boolean installModDependencies = true;
 
     
+    public String elyOAuthAuthorizationEndpoint = "";
+    public String elyOAuthTokenEndpoint = "";
+    public String elyOAuthProfileEndpoint = "";
+    public String elyOAuthClientId = "";
+    public int elyOAuthCallbackPort = 0;
+    public String elyOAuthScope = "";
+    public int elyOAuthTimeoutSeconds = 180;
+    public String elySkinUrlTemplate = "https://skinsystem.ely.by/skins/{username}.png";
+
+    
+    public String githubRepository = "AgroV2/AgroLauncher";
+
+    
     private static int defaultRam() {
         long totalMb = SystemInfo.totalRamMb();
         if (totalMb <= 0) {
@@ -150,6 +163,9 @@ public final class Settings {
         panelOpacityPercent = clamp(panelOpacityPercent, 40, 100);
         windowOpacityPercent = clamp(windowOpacityPercent, 20, 100);
         if (modSearchSort == null || modSearchSort.isBlank()) modSearchSort = "downloads";
+        if (elyOAuthCallbackPort < 0 || elyOAuthCallbackPort > 65535) elyOAuthCallbackPort = 0;
+        if (elyOAuthTimeoutSeconds <= 0) elyOAuthTimeoutSeconds = 180;
+        if (elySkinUrlTemplate == null) elySkinUrlTemplate = "";
         if (language == null) language = "";
     }
 

@@ -6,7 +6,7 @@
 
     <groupId>by.agro</groupId>
     <artifactId>agro-launcher</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
 
     <name>AgroLauncher</name>
     <description>Fast, customizable, lightweight Minecraft launcher that supports Forge/Fabric/Quilt/NeoForge/OptiFine, Modrinth and Ely.by</description>
@@ -21,6 +21,7 @@
         <flatlaf.version>3.6</flatlaf.version>
         <gson.version>2.11.0</gson.version>
         <junit.version>5.11.4</junit.version>
+        <jna.version>5.16.0</jna.version>
 
         <windows.jre.version>17.0.10_7</windows.jre.version>
         <windows.jre.tag>jdk-17.0.10%2B7</windows.jre.tag>
@@ -48,6 +49,11 @@
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
             <version>${gson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna-platform</artifactId>
+            <version>${jna.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

@@ -69,7 +69,7 @@ public final class JavaManager {
         }
 
         JavaInstallation system = detectSystemJava();
-        if (system != null && system.majorVersion >= required) {
+        if (system != null && JavaCompatibility.isAutoCompatible(required, system.majorVersion)) {
             return validate(system.executable, required, JavaSelection.Mode.SYSTEM, "AUTO selected " + system.source);
         }
         if (managed != null) {
@@ -91,6 +91,10 @@ public final class JavaManager {
             throw new IOException(source + " Java " + detected + " is incompatible; Java " + required + "+ is required");
         }
         return new JavaSelection(executable.toAbsolutePath().normalize(), detected, required, source, reason);
+    }
+
+    static boolean isAutoCompatible(int required, int detected) {
+        return JavaCompatibility.isAutoCompatible(required, detected);
     }
 
 

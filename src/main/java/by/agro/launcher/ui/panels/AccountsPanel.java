@@ -3,7 +3,9 @@ package by.agro.launcher.ui.panels;
 import by.agro.launcher.LauncherContext;
 import by.agro.launcher.auth.Account;
 import by.agro.launcher.auth.ElyByAuth;
+import by.agro.launcher.auth.ElyByOAuth;
 import by.agro.launcher.auth.OfflineAuth;
+import by.agro.launcher.ui.components.AccountHeadIcons;
 import by.agro.launcher.ui.components.UiFactory;
 import by.agro.launcher.i18n.Strings;
 import by.agro.launcher.ui.theme.AgroTheme;
@@ -43,9 +45,10 @@ public final class AccountsPanel extends JPanel {
     private final JTextField offlineNickField = new JTextField();
     private final JTextField elyLoginField = new JTextField();
     private final JPasswordField elyPasswordField = new JPasswordField();
-    private final JTextField elyTotpField = new JTextField();
+    private final JPasswordField elyTotpField = new JPasswordField();
     private final JLabel elyStatusLabel = new JLabel(" ");
     private final JButton elyLoginButton;
+    private final JButton elyOAuthButton = UiFactory.button(Strings.get("accounts.oauth"));
 
     public AccountsPanel(LauncherContext context, Consumer<String> statusReporter) {
         this.context = context;
@@ -88,7 +91,7 @@ public final class AccountsPanel extends JPanel {
         accountList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         accountList.setOpaque(false);
         accountList.setBackground(new java.awt.Color(0, 0, 0, 0));
-        accountList.setFixedCellHeight(48);
+        accountList.setFixedCellHeight(-1);
         accountList.setCellRenderer(new AccountCellRenderer());
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
@@ -201,8 +204,13 @@ public final class AccountsPanel extends JPanel {
         c.fill = GridBagConstraints.NONE;
         c.weightx = 0;
         c.insets = new Insets(0, 0, 8, 0);
+        JPanel loginActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        loginActions.setOpaque(false);
         elyLoginButton.addActionListener(e -> loginToElyBy());
-        body.add(elyLoginButton, c);
+        elyOAuthButton.addActionListener(e -> loginToElyByOAuth());
+        loginActions.add(elyLoginButton);
+        loginActions.add(elyOAuthButton);
+        body.add(loginActions, c);
 
         c.gridy++;
         c.fill = GridBagConstraints.HORIZONTAL;
@@ -234,7 +242,9 @@ public final class AccountsPanel extends JPanel {
     private void loginToElyBy() {
         String login = elyLoginField.getText().trim();
         String password = new String(elyPasswordField.getPassword());
-        String totp = elyTotpField.getText().trim();
+        char[] totpChars = elyTotpField.getPassword();
+        String totp = new String(totpChars).trim();
+        java.util.Arrays.fill(totpChars, '\0');
 
         if (login.isEmpty() || password.isEmpty()) {
             setElyStatus(Strings.get("accounts.fillCredentials"), AgroTheme.warning());
@@ -270,6 +280,44 @@ public final class AccountsPanel extends JPanel {
                     if (cause instanceof ElyByAuth.TwoFactorRequiredException) {
                         elyTotpField.requestFocusInWindow();
                     }
+                }
+            }
+        }.execute();
+    }
+
+    private void loginToElyByOAuth() {
+        var settings = context.settings();
+        ElyByOAuth.Config config = new ElyByOAuth.Config(
+                settings.elyOAuthAuthorizationEndpoint, settings.elyOAuthTokenEndpoint,
+                settings.elyOAuthProfileEndpoint, settings.elyOAuthClientId,
+                settings.elyOAuthScope, settings.elyOAuthCallbackPort, settings.elyOAuthTimeoutSeconds);
+        if (!config.complete()) {
+            setElyStatus(Strings.get("accounts.oauthNotConfigured"), AgroTheme.warning());
+            return;
+        }
+        elyOAuthButton.setEnabled(false);
+        setElyStatus(Strings.get("accounts.oauthWaiting"), AgroTheme.textSecondary());
+        new SwingWorker<Account, Void>() {
+            @Override
+            protected Account doInBackground() throws Exception {
+                return ElyByOAuth.authorize(config);
+            }
+
+            @Override
+            protected void done() {
+                elyOAuthButton.setEnabled(true);
+                try {
+                    Account account = get();
+                    context.accounts().save(account);
+                    context.settings().activeAccountId = account.id;
+                    context.settings().save();
+                    refreshAccounts();
+                    setElyStatus(Strings.get("accounts.signedIn", account.username), AgroTheme.accentLight());
+                    report(Strings.get("accounts.signedIn", account.username));
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    setElyStatus(cause.getMessage() != null ? cause.getMessage() : Strings.get("common.error"),
+                            AgroTheme.error());
                 }
             }
         }.execute();
@@ -367,6 +415,17 @@ public final class AccountsPanel extends JPanel {
                                                       int index, boolean isSelected, boolean cellHasFocus) {
             nameLabel.setText(value.username);
             typeLabel.setText(value.type.displayName());
+            javax.swing.Icon icon = AccountHeadIcons.cached(value, context.settings());
+            nameLabel.setIcon(icon);
+            nameLabel.setIconTextGap(icon == null ? 0 : 10);
+            nameLabel.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+            nameLabel.setHorizontalTextPosition(javax.swing.SwingConstants.RIGHT);
+            AccountHeadIcons.load(value, context.settings(), loaded -> {
+                if (loaded != null) {
+                    accountList.revalidate();
+                    accountList.repaint();
+                }
+            });
 
             boolean active = value.id != null && value.id.equals(context.settings().activeAccountId);
             activeMark.setText(active ? Strings.get("accounts.active") : "");

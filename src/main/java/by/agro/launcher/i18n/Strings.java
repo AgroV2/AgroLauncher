@@ -44,6 +44,7 @@ public final class Strings {
         put("common.notSet", "не задан", "not set");
         put("common.any", "любой", "any");
         put("common.openFolder", "Открыть папку", "Open folder");
+        put("common.networkError", "ошибка сети", "network error");
         put("unit.gb", "ГБ", "GB");
         put("unit.mb", "МБ", "MB");
         put("unit.kb", "КБ", "KB");
@@ -55,6 +56,17 @@ public final class Strings {
         put("nav.accounts", "Аккаунты", "Accounts");
         put("nav.mods", "Моды", "Mods");
         put("nav.settings", "Настройки", "Settings");
+        put("nav.about", "О лаунчере", "About launcher");
+
+        put("about.title", "О лаунчере", "About launcher");
+        put("about.subtitle", "Информация о приложении и полезные ссылки", "Application information and useful links");
+        put("about.description", "Быстрый и кастомизируемый лаунчер Minecraft", "Fast and customizable Minecraft launcher");
+        put("about.version", "Версия", "Version");
+        put("about.creator", "Создатель", "Creator");
+        put("about.community", "Сообщество", "Community");
+        put("about.sourceCode", "Исходный код", "Source code");
+        put("about.openFailed", "Не удалось открыть ссылку: {0}", "Could not open link: {0}");
+        put("about.browseUnsupported", "Открытие ссылок не поддерживается системой", "Opening links is not supported by the system");
 
         put("play.version", "Версия", "Version");
         put("play.loader", "Загрузчик", "Loader");
@@ -63,7 +75,12 @@ public final class Strings {
         put("play.button", "ИГРАТЬ", "PLAY");
         put("play.stop", "Остановить игру", "Stop game");
         put("play.console", "Консоль", "Console");
+        put("console.launcherPrefix", "[Лаунчер]", "[Launcher]");
+        put("console.outputClosed", "Поток вывода закрыт: {0}", "Output stream closed: {0}");
         put("play.clear", "Очистить", "Clear");
+        put("play.exportAnalysis", "Экспорт анализа", "Export analysis");
+        put("play.exportAnalysisError", "Не удалось экспортировать анализ: {0}",
+                "Could not export analysis: {0}");
         put("play.noMods", "без модов", "no mods");
         put("play.versionNotSelected", "версия не выбрана", "no version selected");
         put("play.accountNotSelected", "не выбран", "none");
@@ -109,6 +126,20 @@ public final class Strings {
         put("repair.success", "Восстановление завершено. Управляемых модов проверено: {0}",
                 "Repair completed. Launcher-managed mods verified: {0}");
         put("repair.error", "Восстановление не выполнено: {0}", "Repair failed: {0}");
+        put("repair.started", "Восстановление запущено: Minecraft {0}, загрузчик {1}{2}",
+                "Repair started: Minecraft {0}, loader {1}{2}");
+        put("repair.recommendedVersion", " (рекомендуемая версия)", " (recommended version)");
+        put("repair.completedDetails", "Восстановление завершено: профиль {0}, управляемых модов обработано: {1}",
+                "Repair completed: profile {0}, launcher-managed mods processed: {1}");
+        put("repair.consoleError", "ОШИБКА восстановления: {0}", "REPAIR ERROR: {0}");
+        put("repair.backupCreated", "Резервная копия создана до восстановления: {0}",
+                "Backup created before repair: {0}");
+        put("repair.stageMinecraft", "Исправление Minecraft", "Repairing Minecraft");
+        put("repair.stageLoader", "Исправление загрузчика", "Repairing loader");
+        put("repair.stageManagedMods", "Исправление управляемых модов", "Repairing launcher-managed mods");
+        put("repair.stageCompleted", "Исправление завершено", "Repair completed");
+        put("repair.modConflict", "Управляемый мод пропущен: одновременно существуют {0} и {1}",
+                "Launcher-managed mod skipped: both {0} and {1} exist");
 
 
         put("versions.title", "Версии", "Versions");
@@ -173,6 +204,12 @@ public final class Strings {
                 "Two-factor authentication code (if enabled)");
         put("accounts.totpPlaceholder", "6 цифр из приложения", "6 digits from your app");
         put("accounts.signIn", "Войти в Ely.by", "Sign in to Ely.by");
+        put("accounts.oauth", "Войти через OAuth Ely.by", "Sign in with Ely.by OAuth");
+        put("accounts.oauthNotConfigured",
+                "Настройте endpoints OAuth Ely.by и client ID в settings.json",
+                "Configure the Ely.by OAuth endpoints and client ID in settings.json");
+        put("accounts.oauthWaiting", "Ожидание авторизации в браузере…",
+                "Waiting for authorization in the browser…");
         put("accounts.fillCredentials", "Заполните логин и пароль", "Enter your login and password");
         put("accounts.checking", "Проверяем данные…", "Checking credentials…");
         put("accounts.signedIn", "Вход выполнен: {0}", "Signed in: {0}");
@@ -183,8 +220,10 @@ public final class Strings {
         put("mods.title", "Моды", "Mods");
         put("mods.subtitle", "Каталог Modrinth: поиск, установка и автоматическая подтяжка зависимостей",
                 "Modrinth catalog: search, install and automatic dependency resolution");
-        put("mods.catalog", "Каталог", "Catalog");
-        put("mods.installed", "Установленные", "Installed");
+        put("mods.catalog", "Моды", "Mods");
+        put("mods.resourcePacks", "Ресурспаки", "Resource packs");
+        put("mods.shaders", "Шейдеры", "Shaders");
+        put("mods.installed", "Установленные моды", "Installed mods" );
         put("mods.installedTitle", "Установленные моды", "Installed mods");
         put("mods.curseForge", "CurseForge в браузере", "CurseForge in browser");
         put("mods.curseForgeTooltip",
@@ -214,6 +253,12 @@ public final class Strings {
                 "{0} is selected — mods will not load. Choose Fabric, Forge, Quilt or NeoForge.");
         put("mods.folderTitle", "Папка модов", "Mods folder");
         put("mods.openFolderFailed", "Не удалось открыть папку: {0}", "Failed to open folder: {0}");
+        put("mods.openBrowserFailed", "Не удалось открыть браузер: {0}", "Failed to open browser: {0}");
+
+        put("update.title", "Обновление", "Update");
+        put("update.available", "Доступна AgroLauncher {0}. Открыть страницу обновления?",
+                "AgroLauncher {0} is available. Open the update page?");
+        put("update.checkFailed", "Проверка обновлений: {0}", "Update check failed: {0}");
         put("builds.independent", "Независимые сборки:", "Independent builds:");
         put("builds.createSnapshot", "Создать снимок", "Create snapshot");
         put("builds.delete", "Удалить сборку", "Delete build");
@@ -222,15 +267,24 @@ public final class Strings {
         put("builds.defaultName", "Сборка {0}", "Build {0}");
         put("builds.created", "Создан независимый снимок: {0}", "Independent snapshot created: {0}");
         put("builds.selected", "Выбрана сборка: {0}", "Build selected: {0}");
-        put("builds.deleteConfirm", "Удалить сборку «{0}»?", "Delete build “{0}”?");
+        put("builds.deleteConfirm",
+                "Удалить сборку «{0}» и все данные её изолированной игры? Отменить это действие нельзя. Перед удалением закройте игру.",
+                "Delete build “{0}” and all data in its isolated game? This cannot be undone. Close the game before deleting.");
+        put("builds.deleted", "Сборка «{0}» удалена", "Build “{0}” deleted");
+        put("builds.deleteFailed", "Не удалось удалить сборку «{0}»: {1}",
+                "Could not delete build “{0}”: {1}");
         put("builds.modCount", "{0} модов", "{0} mods");
         put("builds.selectVersion", "Выберите версию Minecraft", "Select a Minecraft version");
         put("builds.loaderUnsupported", "Выбранный загрузчик не поддерживает моды",
                 "The selected loader does not support mods");
 
 
-        put("browser.searchPlaceholder", "Поиск модов: sodium, jei, create…",
-                "Search mods: sodium, jei, create…");
+        put("browser.searchPlaceholder.mod", "Поиск модов: Sodium и т. д.",
+                "Search mods: Sodium, etc.");
+        put("browser.searchPlaceholder.resourcepack", "Поиск ресурспаков: Faithful и т. д.",
+                "Search resource packs: Faithful, etc.");
+        put("browser.searchPlaceholder.shader", "Поиск шейдеров: Complementary и т. д.",
+                "Search shaders: Complementary, etc.");
         put("browser.allCategories", "Все категории", "All categories");
         put("browser.loadMore", "Показать ещё", "Load more");
         put("browser.loadingCatalog", "Загрузка каталога…", "Loading catalog…");
@@ -255,7 +309,13 @@ public final class Strings {
 
         put("modDialog.version", "Версия мода", "Mod version");
         put("modDialog.install", "Установить", "Install");
+        put("modDialog.install.mod", "Установить мод", "Install mod");
+        put("modDialog.install.resourcepack", "Установить ресурспак", "Install resource pack");
+        put("modDialog.install.shader", "Установить шейдер", "Install shader");
         put("modDialog.installed", "Установлен", "Installed");
+        put("modDialog.installed.mod", "Мод установлен", "Mod installed");
+        put("modDialog.installed.resourcepack", "Ресурспак установлен", "Resource pack installed");
+        put("modDialog.installed.shader", "Шейдер установлен", "Shader installed");
         put("modDialog.alreadyInstalled", "Уже установлен", "Already installed");
         put("modDialog.openPage", "Открыть страницу", "Open page");
         put("modDialog.withDependencies", "Установить обязательные зависимости",
@@ -265,6 +325,9 @@ public final class Strings {
                 "No versions for the selected loader");
         put("modDialog.versionsFailed", "Ошибка загрузки версий: {0}", "Failed to load versions: {0}");
         put("modDialog.installing", "Установка…", "Installing…");
+        put("modDialog.installing.mod", "Установка мода…", "Installing mod…");
+        put("modDialog.installing.resourcepack", "Установка ресурспака…", "Installing resource pack…");
+        put("modDialog.installing.shader", "Установка шейдера…", "Installing shader…");
         put("modDialog.requiresDeps", "Требует зависимостей: {0}", "Requires dependencies: {0}");
         put("modDialog.depsWillInstall", " — будут установлены", " — will be installed");
         put("modDialog.depsDisabled", " — установка отключена", " — installation disabled");
@@ -278,6 +341,9 @@ public final class Strings {
                 "No suitable dependency version found: {0}");
         put("install.depError", "Ошибка зависимости {0}: {1}", "Dependency error {0}: {1}");
         put("install.stage", "Установка мода", "Installing mod");
+        put("install.stage.mod", "Установка мода", "Installing mod");
+        put("install.stage.resourcepack", "Установка ресурспака", "Installing resource pack");
+        put("install.stage.shader", "Установка шейдера", "Installing shader");
         put("install.summaryInstalled", "Установлено: {0}", "Installed: {0}");
         put("install.summarySkipped", ", уже было: {0}", ", already present: {0}");
         put("install.summaryFailed", ", с ошибкой: {0}", ", failed: {0}");
@@ -303,6 +369,10 @@ public final class Strings {
         put("settings.java", "Java", "Java");
         put("settings.useManagedJava", "Использовать встроенную Java (скачивается автоматически)",
                 "Use bundled Java (downloaded automatically)");
+        put("settings.offlineMode", "Ограниченный офлайн-режим", "Limited offline mode");
+        put("settings.offlineModeTooltip",
+                "Использовать только уже загруженные данные; сетевые функции будут недоступны",
+                "Use only previously downloaded data; network features will be unavailable");
         put("settings.javaHint",
                 "Лаунчер сам подберёт нужную версию: Java 8 для 1.16 и старше, 17 для 1.17–1.20.4, 21 для 1.20.5+",
                 "The launcher picks the right version: Java 8 for 1.16 and older, 17 for 1.17–1.20.4, 21 for 1.20.5+");

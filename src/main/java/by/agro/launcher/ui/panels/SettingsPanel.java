@@ -47,7 +47,7 @@ public final class SettingsPanel extends JPanel {
     private final JTextField javaPathField = new JTextField();
     private final JCheckBox useManagedJava = new JCheckBox(Strings.get("settings.useManagedJava"));
     private final JComboBox<String> javaModeCombo = new JComboBox<>(new String[]{"AUTO", "MANAGED", "SYSTEM", "CUSTOM"});
-    private final JCheckBox offlineMode = new JCheckBox("Ограниченный offline mode");
+    private final JCheckBox offlineMode = new JCheckBox(Strings.get("settings.offlineMode"));
     private final JComboBox<String> javaInstallationsCombo = new JComboBox<>();
     private final JTextField jvmArgsField = new JTextField();
     private final JTextField gameArgsField = new JTextField();
@@ -188,6 +188,7 @@ public final class SettingsPanel extends JPanel {
         });
         offlineMode.setOpaque(false);
         offlineMode.setAlignmentX(Component.LEFT_ALIGNMENT);
+        offlineMode.setToolTipText(Strings.get("settings.offlineModeTooltip"));
         offlineMode.addActionListener(e -> {
             context.settings().offlineMode = offlineMode.isSelected();
             context.settings().save();

@@ -10,6 +10,7 @@ import by.agro.launcher.integrity.InstallationManifest;
 import by.agro.launcher.integrity.IntegrityService;
 import by.agro.launcher.integrity.ManifestEntry;
 import by.agro.launcher.integrity.ManifestStore;
+import by.agro.launcher.i18n.Strings;
 import by.agro.launcher.loaders.LoaderInstaller;
 import by.agro.launcher.loaders.LoaderType;
 import by.agro.launcher.modrinth.ModrinthVersion;
@@ -24,7 +25,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 public final class RepairService {
 
@@ -62,10 +66,10 @@ public final class RepairService {
         Path gameRoot = requireSafeRoot(request.gameDir, "Game directory");
         requireSafeRoot(paths.gameDir(), "Minecraft data directory");
         Path backup = new BackupService(paths.root().resolve("backups")).create(gameRoot);
-        listener.onMessage("Резервная копия создана до repair: " + backup.getFileName());
+        listener.onMessage(Strings.get("repair.backupCreated", backup.getFileName()));
 
         InstallationManifest installation = manifestStore.read(paths.root());
-        listener.onProgress("Исправление Minecraft", 0, 3, request.minecraftVersion);
+        listener.onProgress(Strings.get("repair.stageMinecraft"), 0, 3, request.minecraftVersion);
         int repairedMods;
         try (RepairTransaction transaction = new RepairTransaction(
                 paths.root(), paths.root().resolve("transactions"), integrity)) {
@@ -79,13 +83,13 @@ public final class RepairService {
             if (request.loaderInstaller == null) {
                 throw new IOException("Installer is unavailable for " + request.loaderType.displayName());
             }
-            listener.onProgress("Исправление загрузчика", 1, 3, request.loaderType.displayName());
+            listener.onProgress(Strings.get("repair.stageLoader"), 1, 3, request.loaderType.displayName());
             versionId = installLoaderWithRollback(request, installation, listener);
         }
 
         recordManagedJre(installation);
         manifestStore.write(paths.root(), installation);
-        listener.onProgress("Исправление завершено", 3, 3, versionId);
+        listener.onProgress(Strings.get("repair.stageCompleted"), 3, 3, versionId);
         return new Result(versionId, repairedMods);
     }
 
@@ -128,11 +132,24 @@ public final class RepairService {
         rejectExistingLink(metadata, "Managed-mod metadata");
         ManagedMods managed = Json.read(metadata, ManagedMods.class);
         if (managed == null || managed.mods == null) return 0;
+
+        Path modsRoot = requireManagedPath(gameRoot, gameRoot.resolve("mods"), "Mods directory");
+        Map<String, Path> snapshot = snapshotModFiles(modsRoot);
         int done = 0;
         for (ManagedMod mod : managed.mods) {
             if (mod == null || mod.fileName == null || mod.url == null || mod.sha1 == null) continue;
-            String name = mod.fileName + (mod.disabled ? ".disabled" : "");
-            Path target = safeChild(gameRoot.resolve("mods"), name, "Managed mod");
+            Path metadataName = safeChild(modsRoot, mod.fileName, "Managed mod");
+            String baseName = metadataName.getFileName().toString();
+            Path enabled = snapshot.get(baseName.toLowerCase(Locale.ROOT));
+            Path disabled = snapshot.get((baseName + ".disabled").toLowerCase(Locale.ROOT));
+            if (enabled != null && disabled != null) {
+                listener.onMessage(Strings.get("repair.modConflict",
+                        enabled.getFileName(), disabled.getFileName()));
+                continue;
+            }
+            Path target = enabled != null ? enabled : disabled;
+            if (target == null) continue;
+
             String relative = relativeToRoot(target);
             ManifestEntry placeholder = new ManifestEntry(relative, "pending", mod.size,
                     "modrinth", "observed", mod.url);
@@ -142,9 +159,43 @@ public final class RepairService {
             transaction.addStaged(entry);
             replaceEntry(installation, entry);
             done++;
-            listener.onProgress("Исправление управляемых модов", done, managed.mods.size(), name);
+            listener.onProgress(Strings.get("repair.stageManagedMods"), done, managed.mods.size(),
+                    target.getFileName().toString());
         }
         return done;
+    }
+
+    static Map<String, Path> snapshotModFiles(Path modsRoot) throws IOException {
+        Map<String, Path> result = new HashMap<>();
+        if (!Files.isDirectory(modsRoot, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(modsRoot)) {
+            return result;
+        }
+        try (var files = Files.list(modsRoot)) {
+            for (Path file : files.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                    && !Files.isSymbolicLink(path)).toList()) {
+                String name = file.getFileName().toString();
+                String lower = name.toLowerCase(Locale.ROOT);
+                if (lower.endsWith(".jar") || lower.endsWith(".jar.disabled")) {
+                    result.put(lower, file);
+                }
+            }
+        }
+        return result;
+    }
+
+    static List<Path> selectManagedModCandidates(ManagedMods managed, Map<String, Path> snapshot) {
+        List<Path> result = new ArrayList<>();
+        if (managed == null || managed.mods == null || snapshot == null) return result;
+        for (ManagedMod mod : managed.mods) {
+            if (mod == null || mod.fileName == null) continue;
+            String key = mod.fileName.toLowerCase(Locale.ROOT);
+            Path enabled = snapshot.get(key);
+            Path disabled = snapshot.get((mod.fileName + ".disabled").toLowerCase(Locale.ROOT));
+            if ((enabled == null) != (disabled == null)) {
+                result.add(enabled != null ? enabled : disabled);
+            }
+        }
+        return result;
     }
 
     private ManifestEntry observedStaged(Path staged, String relative, String ownership,

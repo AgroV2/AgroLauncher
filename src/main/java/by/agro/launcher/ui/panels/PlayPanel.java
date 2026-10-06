@@ -12,6 +12,7 @@ import by.agro.launcher.loaders.LoaderInstaller;
 import by.agro.launcher.loaders.LoaderType;
 import by.agro.launcher.mods.ModBuildManager;
 import by.agro.launcher.repair.RepairService;
+import by.agro.launcher.ui.components.AccountHeadIcons;
 import by.agro.launcher.ui.components.GameConsole;
 import by.agro.launcher.ui.components.UiFactory;
 import by.agro.launcher.i18n.Strings;
@@ -47,7 +48,7 @@ public final class PlayPanel extends JPanel {
     private final JButton playButton = UiFactory.primaryButton(Strings.get("play.button"));
     private final JButton repairButton = UiFactory.primaryButton(Strings.get("repair.button"));
     private final JButton stopButton = UiFactory.dangerButton(Strings.get("play.stop"));
-    private final JButton exportButton = UiFactory.linkButton("Export analysis");
+    private final JButton exportButton = UiFactory.linkButton(Strings.get("play.exportAnalysis"));
     private final JProgressBar progressBar = new JProgressBar();
     private final JLabel progressLabel = new JLabel(" ");
     private final GameConsole console = new GameConsole();
@@ -114,6 +115,8 @@ public final class PlayPanel extends JPanel {
         valueLabel.setFont(AgroTheme.boldFont(14));
         valueLabel.setForeground(AgroTheme.textPrimary());
         valueLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        valueLabel.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        valueLabel.setHorizontalTextPosition(javax.swing.SwingConstants.RIGHT);
 
         panel.add(captionLabel);
         panel.add(UiFactory.verticalGap(3));
@@ -202,6 +205,23 @@ public final class PlayPanel extends JPanel {
             accountLabel.setText(account == null
                     ? Strings.get("play.accountNotSelected")
                     : account.username + " · " + account.type.displayName());
+            javax.swing.Icon accountIcon = AccountHeadIcons.cached(account, context.settings());
+            accountLabel.setIcon(accountIcon);
+            accountLabel.setIconTextGap(accountIcon == null ? 0 : 8);
+            accountLabel.setMinimumSize(null);
+            accountLabel.setPreferredSize(null);
+            if (account != null) {
+                String requestedAccountId = account.id;
+                AccountHeadIcons.load(account, context.settings(), icon -> {
+                    Account current = activeAccount();
+                    if (current != null && java.util.Objects.equals(requestedAccountId, current.id)) {
+                        accountLabel.setIcon(icon);
+                        accountLabel.setIconTextGap(icon == null ? 0 : 8);
+                        accountLabel.revalidate();
+                        accountLabel.repaint();
+                    }
+                });
+            }
 
             ramLabel.setText(SystemInfo.formatMb(context.settings().maxRamMb));
 
@@ -326,11 +346,12 @@ public final class PlayPanel extends JPanel {
         progressBar.setVisible(true);
         progressBar.setIndeterminate(true);
         progressLabel.setText(Strings.get("repair.starting"));
-        console.appendLauncherMessage("Восстановление запущено: Minecraft " + mcVersion
-                + ", loader " + loaderType.displayName()
-                + (context.settings().selectedLoaderVersion == null
+        String loaderVersion = context.settings().selectedLoaderVersion == null
                 || context.settings().selectedLoaderVersion.isBlank()
-                ? " (рекомендуемая версия)" : " " + context.settings().selectedLoaderVersion));
+                ? Strings.get("repair.recommendedVersion")
+                : " " + context.settings().selectedLoaderVersion;
+        console.appendLauncherMessage(Strings.get("repair.started",
+                mcVersion, loaderType.displayName(), loaderVersion));
 
         ProgressListener listener = new ProgressListener() {
             @Override
@@ -381,8 +402,8 @@ public final class PlayPanel extends JPanel {
                     RepairService.Result result = get();
                     String message = Strings.get("repair.success", result.managedMods);
                     progressLabel.setText(message);
-                    console.appendLauncherMessage("Восстановление завершено: профиль " + result.versionId
-                            + ", управляемых модов обработано: " + result.managedMods);
+                    console.appendLauncherMessage(Strings.get("repair.completedDetails",
+                            result.versionId, result.managedMods));
                     report(message);
                     JOptionPane.showMessageDialog(PlayPanel.this, message,
                             Strings.get("repair.title"), JOptionPane.INFORMATION_MESSAGE);
@@ -391,7 +412,7 @@ public final class PlayPanel extends JPanel {
                     String detail = cause.getMessage() != null ? cause.getMessage() : cause.toString();
                     String message = Strings.get("repair.error", detail);
                     progressLabel.setText(message);
-                    console.appendLauncherMessage("ОШИБКА восстановления: " + detail);
+                    console.appendLauncherMessage(Strings.get("repair.consoleError", detail));
                     appendRepairStackTrace(cause);
                     report(message);
                     JOptionPane.showMessageDialog(PlayPanel.this, message,
@@ -482,7 +503,7 @@ public final class PlayPanel extends JPanel {
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
                     JOptionPane.showMessageDialog(PlayPanel.this,
-                            "Could not export analysis: " + cause.getMessage(),
+                            Strings.get("play.exportAnalysisError", cause.getMessage()),
                             "Export error", JOptionPane.ERROR_MESSAGE);
                 }
             }

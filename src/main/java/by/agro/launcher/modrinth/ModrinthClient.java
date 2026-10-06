@@ -81,17 +81,28 @@ public final class ModrinthClient {
 
     public SearchResult search(String query, String loader, String gameVersion, String category,
                                Sort sort, int offset, int limit) throws IOException {
-        List<String> facetGroups = new ArrayList<>();
-        facetGroups.add("[\"project_type:mod\"]");
+        return search(query, loader, gameVersion, category, "mod", sort, offset, limit);
+    }
 
-        if (loader != null && !loader.isBlank() && !"vanilla".equalsIgnoreCase(loader)) {
-            facetGroups.add("[\"categories:" + loader.toLowerCase() + "\"]");
+    public SearchResult search(String query, String loader, String gameVersion, String category,
+                               String projectType, Sort sort, int offset, int limit) throws IOException {
+        String type = switch (projectType) {
+            case "resourcepack", "shader" -> projectType;
+            default -> "mod";
+        };
+        JsonArray facets = new JsonArray();
+        addFacet(facets, "project_type:" + type);
+
+
+        if ("mod".equals(type) && loader != null && !loader.isBlank()
+                && !"vanilla".equalsIgnoreCase(loader)) {
+            addFacet(facets, "categories:" + loader.trim().toLowerCase());
         }
         if (gameVersion != null && !gameVersion.isBlank()) {
-            facetGroups.add("[\"versions:" + gameVersion + "\"]");
+            addFacet(facets, "versions:" + gameVersion.trim());
         }
         if (category != null && !category.isBlank()) {
-            facetGroups.add("[\"categories:" + category + "\"]");
+            addFacet(facets, "categories:" + category.trim());
         }
 
         StringBuilder url = new StringBuilder(API_BASE).append("/search?");
@@ -101,7 +112,7 @@ public final class ModrinthClient {
         if (query != null && !query.isBlank()) {
             url.append("&query=").append(encode(query.trim()));
         }
-        url.append("&facets=").append(encode("[" + String.join(",", facetGroups) + "]"));
+        url.append("&facets=").append(encode(facets.toString()));
 
         String body = downloader.getString(url.toString(), headers());
         JsonObject root = Json.parseObject(body);
@@ -117,6 +128,12 @@ public final class ModrinthClient {
         }
         int totalHits = Json.intValue(root, "total_hits", projects.size());
         return new SearchResult(projects, totalHits, Math.max(0, offset));
+    }
+
+    private static void addFacet(JsonArray facets, String value) {
+        JsonArray group = new JsonArray();
+        group.add(value);
+        facets.add(group);
     }
 
     public ModrinthProject project(String idOrSlug) throws IOException {
