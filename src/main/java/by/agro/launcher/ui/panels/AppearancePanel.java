@@ -1,0 +1,571 @@
+package by.agro.launcher.ui.panels;
+
+import by.agro.launcher.LauncherContext;
+import by.agro.launcher.i18n.Language;
+import by.agro.launcher.i18n.Strings;
+import by.agro.launcher.ui.background.BackgroundManager;
+import by.agro.launcher.ui.components.ColorWheel;
+import by.agro.launcher.ui.components.GradientPreviewCard;
+import by.agro.launcher.ui.components.ThemePreviewCard;
+import by.agro.launcher.ui.components.UiFactory;
+import by.agro.launcher.ui.theme.AgroTheme;
+import by.agro.launcher.ui.theme.PaletteFactory;
+import by.agro.launcher.ui.theme.GradientPreset;
+import by.agro.launcher.ui.theme.ThemePreset;
+
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComponent;
+import javax.swing.JFileChooser;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JSlider;
+import javax.swing.JTextField;
+import javax.swing.Timer;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.GridLayout;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+
+public final class AppearancePanel extends JPanel {
+
+    private final LauncherContext context;
+    private final BackgroundManager backgroundManager;
+    private final Consumer<String> statusReporter;
+    private final Runnable onAppearanceChanged;
+
+    private final List<ThemePreviewCard> themeCards = new ArrayList<>();
+    private final List<GradientPreviewCard> gradientCards = new ArrayList<>();
+    private final java.util.Map<Language, JButton> languageButtons =
+            new java.util.EnumMap<>(Language.class);
+    private final JPanel customColorSection = UiFactory.transparentPanel();
+    private final ColorWheel colorWheel;
+
+    private final JTextField backgroundPathField = new JTextField();
+    private final JCheckBox blurCheckBox = new JCheckBox(Strings.get("appearance.blur"));
+    private final JSlider blurRadiusSlider;
+    private final JSlider dimSlider;
+    private final JSlider opacitySlider;
+    private final JSlider windowOpacitySlider;
+    private final JLabel backgroundStatusLabel = new JLabel(" ");
+    private final JLabel blurRadiusValue = new JLabel();
+    private final JLabel dimValue = new JLabel();
+    private final JLabel opacityValue = new JLabel();
+    private final JLabel windowOpacityValue = new JLabel();
+
+    private final Timer applyDebounce;
+    private final Timer opacitySaveDebounce;
+
+    public AppearancePanel(LauncherContext context, BackgroundManager backgroundManager,
+                           Consumer<String> statusReporter, Runnable onAppearanceChanged) {
+        this.context = context;
+        this.backgroundManager = backgroundManager;
+        this.statusReporter = statusReporter;
+        this.onAppearanceChanged = onAppearanceChanged;
+
+        var settings = context.settings();
+        Color customColor = PaletteFactory.parseHex(settings.customAccentColor);
+        this.colorWheel = new ColorWheel(customColor != null ? customColor : AgroTheme.accent());
+        this.blurRadiusSlider = new JSlider(1, 40, settings.backgroundBlurRadius);
+        this.dimSlider = new JSlider(0, 90, settings.backgroundDimPercent);
+        this.opacitySlider = new JSlider(40, 100, settings.panelOpacityPercent);
+        this.windowOpacitySlider = new JSlider(20, 100, settings.windowOpacityPercent);
+
+        applyDebounce = new Timer(220, e -> applyBackgroundSettings());
+        applyDebounce.setRepeats(false);
+        opacitySaveDebounce = new Timer(250, e -> context.settings().save());
+        opacitySaveDebounce.setRepeats(false);
+
+        setOpaque(false);
+        setLayout(new BorderLayout());
+
+        JPanel content = UiFactory.transparentPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBorder(BorderFactory.createEmptyBorder(4, 0, 10, 0));
+
+        content.add(buildLanguageCard());
+        content.add(UiFactory.verticalGap(16));
+        content.add(buildThemeCard());
+        content.add(UiFactory.verticalGap(16));
+        content.add(buildBackgroundCard());
+
+        add(UiFactory.scroll(content), BorderLayout.CENTER);
+
+        loadValues();
+        AgroTheme.setGradient(GradientPreset.fromId(settings.gradientPreset), settings.customGradientColors);
+    }
+
+    private JComponent buildLanguageCard() {
+        JPanel card = UiFactory.titledCard(Strings.get("appearance.language"));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 118));
+
+        JPanel body = UiFactory.transparentPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        for (Language language : Language.values()) {
+            row.add(buildLanguageButton(language));
+        }
+
+        JLabel hint = UiFactory.hint(Strings.get("appearance.languageHint"));
+        hint.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        body.add(row);
+        body.add(UiFactory.verticalGap(8));
+        body.add(hint);
+
+        card.add(body, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JButton buildLanguageButton(Language language) {
+        boolean active = Strings.language() == language;
+        JButton button = active
+                ? UiFactory.primaryButton(language.displayName())
+                : UiFactory.button(language.displayName());
+        button.setPreferredSize(new Dimension(122, 34));
+        button.addActionListener(e -> selectLanguage(language));
+        languageButtons.put(language, button);
+        return button;
+    }
+
+    private void selectLanguage(Language language) {
+        if (Strings.language() == language) {
+            return;
+        }
+        context.settings().language = language.code();
+        context.settings().save();
+        Strings.setLanguage(language);
+        report(Strings.get("appearance.languageChanged", language.displayName()));
+        notifyChanged();
+    }
+
+    private JComponent buildThemeCard() {
+        JPanel card = UiFactory.titledCard(Strings.get("appearance.theme"));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel body = UiFactory.transparentPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+        JPanel grid = UiFactory.transparentPanel();
+        grid.setLayout(new GridLayout(0, 4, 12, 12));
+        grid.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        for (ThemePreset preset : ThemePreset.values()) {
+            ThemePreviewCard previewCard = new ThemePreviewCard(preset, this::selectTheme);
+            themeCards.add(previewCard);
+            grid.add(previewCard);
+        }
+        body.add(grid);
+        body.add(UiFactory.verticalGap(14));
+        body.add(buildGradientPresets());
+        body.add(UiFactory.verticalGap(14));
+        body.add(buildCustomColorSection());
+
+        card.add(body, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JComponent buildGradientPresets() {
+        JPanel section = UiFactory.transparentPanel();
+        section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
+        JLabel label = UiFactory.fieldLabel(Strings.get("appearance.gradient"));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel grid = UiFactory.transparentPanel();
+        grid.setLayout(new GridLayout(0, 4, 12, 12));
+        grid.setAlignmentX(Component.LEFT_ALIGNMENT);
+        for (GradientPreset preset : GradientPreset.values()) {
+            if (preset == GradientPreset.NONE || preset == GradientPreset.CUSTOM) continue;
+            GradientPreviewCard previewCard = new GradientPreviewCard(preset, this::selectGradient);
+            gradientCards.add(previewCard);
+            grid.add(previewCard);
+        }
+        section.add(label);
+        section.add(UiFactory.verticalGap(8));
+        section.add(grid);
+        return section;
+    }
+
+    private void selectGradient(GradientPreset preset) {
+        context.settings().gradientPreset = preset.name();
+        context.settings().save();
+        AgroTheme.setGradient(preset, context.settings().customGradientColors);
+        updatePresetSelection(preset != GradientPreset.NONE);
+        customColorSection.setVisible(preset == GradientPreset.CUSTOM);
+        revalidate();
+        repaint();
+        notifyChanged();
+        report(Strings.get("appearance.gradientSelected", preset.displayName()));
+    }
+
+    private JComponent buildCustomColorSection() {
+        customColorSection.setLayout(new BoxLayout(customColorSection, BoxLayout.Y_AXIS));
+        customColorSection.setAlignmentX(Component.LEFT_ALIGNMENT);
+        customColorSection.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, AgroTheme.border()),
+                BorderFactory.createEmptyBorder(14, 0, 0, 0)));
+
+        JLabel label = UiFactory.fieldLabel(Strings.get("appearance.customColor"));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel hint = UiFactory.hint(Strings.get("appearance.customColorHint"));
+        hint.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        colorWheel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        colorWheel.onChange(this::previewCustomColor);
+        colorWheel.onChangeFinished(this::applyCustomColor);
+
+        customColorSection.add(label);
+        customColorSection.add(UiFactory.verticalGap(2));
+        customColorSection.add(hint);
+        customColorSection.add(UiFactory.verticalGap(10));
+        customColorSection.add(colorWheel);
+        customColorSection.add(UiFactory.verticalGap(14));
+        customColorSection.add(buildCustomGradientEditor());
+        return customColorSection;
+    }
+
+    private JComponent buildCustomGradientEditor() {
+        JPanel panel = UiFactory.transparentPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        JLabel label = UiFactory.fieldLabel(Strings.get("appearance.gradientCustom"));
+        JLabel hint = UiFactory.hint(Strings.get("appearance.gradientHint"));
+        JTextField colors = new JTextField(context.settings().customGradientColors);
+        colors.setToolTipText(Strings.get("appearance.gradientColorsHint"));
+        Runnable applyCustomGradient = () -> {
+            String normalized = normalizeGradientColors(colors.getText());
+            colors.setText(normalized);
+            context.settings().customGradientColors = normalized;
+            context.settings().gradientPreset = GradientPreset.CUSTOM.name();
+            context.settings().save();
+            AgroTheme.setGradient(GradientPreset.CUSTOM, normalized);
+            updatePresetSelection(true);
+            notifyChanged();
+        };
+        colors.addActionListener(e -> applyCustomGradient.run());
+        colors.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusLost(java.awt.event.FocusEvent e) {
+                applyCustomGradient.run();
+            }
+        });
+        panel.add(label);
+        panel.add(UiFactory.verticalGap(2));
+        panel.add(hint);
+        panel.add(UiFactory.verticalGap(8));
+        panel.add(colors);
+        return panel;
+    }
+
+    private String normalizeGradientColors(String value) {
+        java.util.List<String> colors = java.util.Arrays.stream((value == null ? "" : value).split(","))
+                .map(String::trim)
+                .filter(color -> color.matches("(?i)#[0-9a-f]{6}"))
+                .limit(10)
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+        if (colors.isEmpty()) return "#10B981,#38BDF8";
+        if (colors.size() == 1) colors.add(colors.get(0));
+        return String.join(",", colors);
+    }
+
+    private void updatePresetSelection(boolean gradientSelected) {
+        ThemePreset activeTheme = ThemePreset.fromId(context.settings().themePreset);
+        GradientPreset activeGradient = GradientPreset.fromId(context.settings().gradientPreset);
+        for (ThemePreviewCard card : themeCards) {
+            card.setSelected(!gradientSelected && card.preset() == activeTheme);
+        }
+        for (GradientPreviewCard card : gradientCards) {
+            card.setSelected(card.preset() == activeGradient);
+        }
+    }
+
+    private void selectTheme(ThemePreset preset) {
+        context.settings().themePreset = preset.name();
+        context.settings().gradientPreset = GradientPreset.NONE.name();
+        context.settings().save();
+
+        Color customColor = PaletteFactory.parseHex(context.settings().customAccentColor);
+        AgroTheme.apply(preset, customColor != null ? customColor : colorWheel.color());
+        AgroTheme.setGradient(GradientPreset.NONE, context.settings().customGradientColors);
+
+        updatePresetSelection(false);
+        customColorSection.setVisible(preset.isCustom());
+        revalidate();
+        repaint();
+        notifyChanged();
+        report(Strings.get("appearance.themeSelected", preset.displayName()));
+    }
+
+    private void previewCustomColor(Color color) {
+        context.settings().customAccentColor = PaletteFactory.toHex(color);
+
+        for (ThemePreviewCard card : themeCards) {
+            card.updateCustomColor(color);
+        }
+    }
+
+    private void applyCustomColor(Color color) {
+        String hex = PaletteFactory.toHex(color);
+        context.settings().customAccentColor = hex;
+        context.settings().customGradientColors = buildCustomColorGradient(color);
+        context.settings().gradientPreset = GradientPreset.CUSTOM.name();
+        context.settings().save();
+
+        if (ThemePreset.fromId(context.settings().themePreset).isCustom()) {
+            AgroTheme.apply(ThemePreset.CUSTOM, color);
+        }
+        AgroTheme.setGradient(GradientPreset.CUSTOM, context.settings().customGradientColors);
+        updatePresetSelection(true);
+        notifyChanged();
+    }
+
+    private String buildCustomColorGradient(Color color) {
+        Color dark = color.darker();
+        Color light = new Color(
+                Math.min(255, color.getRed() + (255 - color.getRed()) / 3),
+                Math.min(255, color.getGreen() + (255 - color.getGreen()) / 3),
+                Math.min(255, color.getBlue() + (255 - color.getBlue()) / 3));
+        return PaletteFactory.toHex(dark) + "," + PaletteFactory.toHex(color) + "," + PaletteFactory.toHex(light);
+    }
+
+    private void updateThemeSelection() {
+        boolean gradientSelected = GradientPreset.fromId(context.settings().gradientPreset) != GradientPreset.NONE;
+        updatePresetSelection(gradientSelected);
+    }
+
+    private JComponent buildBackgroundCard() {
+        JPanel card = UiFactory.titledCard(Strings.get("appearance.background"));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel body = UiFactory.transparentPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+        JLabel pathLabel = UiFactory.fieldLabel(Strings.get("appearance.backgroundPath"));
+        pathLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel pathRow = new JPanel(new BorderLayout(8, 0));
+        pathRow.setOpaque(false);
+        pathRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        pathRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+
+        backgroundPathField.putClientProperty("JTextField.placeholderText",
+                Strings.get("appearance.backgroundPlaceholder"));
+        UiFactory.fixHeight(backgroundPathField, 34);
+        backgroundPathField.addActionListener(e -> applyBackgroundPath(backgroundPathField.getText()));
+        backgroundPathField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                applyBackgroundPath(backgroundPathField.getText());
+            }
+        });
+
+        JPanel pathButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        pathButtons.setOpaque(false);
+        JButton browseButton = UiFactory.button(Strings.get("common.choose"));
+        browseButton.addActionListener(e -> browseForImage());
+        JButton clearButton = UiFactory.button(Strings.get("common.remove"));
+        clearButton.addActionListener(e -> clearBackground());
+        pathButtons.add(browseButton);
+        pathButtons.add(clearButton);
+
+        pathRow.add(backgroundPathField, BorderLayout.CENTER);
+        pathRow.add(pathButtons, BorderLayout.EAST);
+
+        backgroundStatusLabel.setFont(AgroTheme.font(11));
+        backgroundStatusLabel.setForeground(AgroTheme.textMuted());
+        backgroundStatusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        blurCheckBox.setOpaque(false);
+        blurCheckBox.setFont(AgroTheme.font(13));
+        blurCheckBox.setAlignmentX(Component.LEFT_ALIGNMENT);
+        blurCheckBox.addActionListener(e -> {
+            context.settings().backgroundBlur = blurCheckBox.isSelected();
+            context.settings().save();
+            blurRadiusSlider.setEnabled(blurCheckBox.isSelected());
+            applyBackgroundSettings();
+        });
+
+        body.add(pathLabel);
+        body.add(UiFactory.verticalGap(4));
+        body.add(pathRow);
+        body.add(UiFactory.verticalGap(6));
+        body.add(backgroundStatusLabel);
+        body.add(UiFactory.verticalGap(14));
+        body.add(blurCheckBox);
+        body.add(UiFactory.verticalGap(10));
+        body.add(buildSliderRow(Strings.get("appearance.blurRadius"), blurRadiusSlider, blurRadiusValue, " px"));
+        body.add(UiFactory.verticalGap(10));
+        body.add(buildSliderRow(Strings.get("appearance.dim"), dimSlider, dimValue, " %"));
+        body.add(UiFactory.verticalGap(10));
+        body.add(buildSliderRow(Strings.get("appearance.panelOpacity"), opacitySlider, opacityValue, " %"));
+        body.add(UiFactory.verticalGap(10));
+        body.add(buildSliderRow(Strings.get("appearance.windowOpacity"),
+                windowOpacitySlider, windowOpacityValue, " %"));
+
+        card.add(body, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JComponent buildSliderRow(String caption, JSlider slider, JLabel valueLabel, String suffix) {
+        JPanel row = UiFactory.transparentPanel();
+        row.setLayout(new BorderLayout(12, 0));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+
+        JLabel captionLabel = UiFactory.fieldLabel(caption);
+        captionLabel.setPreferredSize(new Dimension(148, 22));
+
+        slider.setOpaque(false);
+        slider.setPreferredSize(new Dimension(260, 28));
+        slider.addChangeListener(e -> {
+            valueLabel.setText(slider.getValue() + suffix);
+            updateSliderValuesInMemory();
+            if (slider == windowOpacitySlider) {
+                
+                notifyChanged();
+                if (slider.getValueIsAdjusting()) {
+                    opacitySaveDebounce.restart();
+                } else {
+                    opacitySaveDebounce.stop();
+                    context.settings().save();
+                }
+            } else if (!slider.getValueIsAdjusting()) {
+                context.settings().save();
+                applyDebounce.restart();
+            }
+        });
+
+        valueLabel.setText(slider.getValue() + suffix);
+        valueLabel.setFont(AgroTheme.boldFont(12));
+        valueLabel.setForeground(AgroTheme.accentLight());
+        valueLabel.setPreferredSize(new Dimension(56, 22));
+
+        row.add(captionLabel, BorderLayout.WEST);
+        row.add(slider, BorderLayout.CENTER);
+        row.add(valueLabel, BorderLayout.EAST);
+        return row;
+    }
+
+    private void updateSliderValuesInMemory() {
+        var settings = context.settings();
+        settings.backgroundBlurRadius = blurRadiusSlider.getValue();
+        settings.backgroundDimPercent = dimSlider.getValue();
+        settings.panelOpacityPercent = opacitySlider.getValue();
+        settings.windowOpacityPercent = windowOpacitySlider.getValue();
+    }
+
+    private void browseForImage() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle(Strings.get("appearance.backgroundChoose"));
+        chooser.setFileFilter(new FileNameExtensionFilter(
+                Strings.get("appearance.imageFilter"), "png", "jpg", "jpeg", "gif", "bmp"));
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File file = chooser.getSelectedFile();
+            backgroundPathField.setText(file.getAbsolutePath());
+            applyBackgroundPath(file.getAbsolutePath());
+        }
+    }
+
+    private void applyBackgroundPath(String path) {
+        String trimmed = path == null ? "" : path.trim();
+        if (trimmed.equals(context.settings().backgroundImagePath)) {
+            return;
+        }
+        context.settings().backgroundImagePath = trimmed;
+        context.settings().save();
+        applyBackgroundSettings();
+    }
+
+    private void clearBackground() {
+        backgroundPathField.setText("");
+        context.settings().backgroundImagePath = "";
+        context.settings().save();
+        backgroundManager.clear();
+        backgroundStatusLabel.setText(Strings.get("appearance.backgroundOff"));
+        backgroundStatusLabel.setForeground(AgroTheme.textMuted());
+        notifyChanged();
+        report(Strings.get("appearance.backgroundRemoved"));
+    }
+
+    private void applyBackgroundSettings() {
+        backgroundManager.invalidateCache();
+        boolean loaded = backgroundManager.load(context.settings());
+
+        if (context.settings().backgroundImagePath.isBlank()) {
+            backgroundStatusLabel.setText(Strings.get("appearance.backgroundOff"));
+            backgroundStatusLabel.setForeground(AgroTheme.textMuted());
+        } else if (loaded) {
+            StringBuilder status = new StringBuilder(Strings.get("appearance.backgroundLoaded"));
+            if (backgroundManager.isAnimated()) {
+                status.append(Strings.get("appearance.backgroundGif"));
+                if (context.settings().backgroundBlur) {
+                    status.append(Strings.get("appearance.backgroundGifBlur"));
+                }
+            }
+            backgroundStatusLabel.setText(status.toString());
+            backgroundStatusLabel.setForeground(AgroTheme.accentLight());
+        } else {
+            String error = backgroundManager.lastError();
+            backgroundStatusLabel.setText(error != null ? error : Strings.get("appearance.backgroundFailed"));
+            backgroundStatusLabel.setForeground(AgroTheme.error());
+        }
+        notifyChanged();
+    }
+
+    private void loadValues() {
+        var settings = context.settings();
+        backgroundPathField.setText(settings.backgroundImagePath);
+        blurCheckBox.setSelected(settings.backgroundBlur);
+        blurRadiusSlider.setEnabled(settings.backgroundBlur);
+        blurRadiusSlider.setValue(settings.backgroundBlurRadius);
+        dimSlider.setValue(settings.backgroundDimPercent);
+        opacitySlider.setValue(settings.panelOpacityPercent);
+        windowOpacitySlider.setValue(settings.windowOpacityPercent);
+
+        ThemePreset active = ThemePreset.fromId(settings.themePreset);
+        boolean gradientSelected = GradientPreset.fromId(settings.gradientPreset) != GradientPreset.NONE;
+        updatePresetSelection(gradientSelected);
+        customColorSection.setVisible(!gradientSelected && active.isCustom());
+
+        Color customColor = PaletteFactory.parseHex(settings.customAccentColor);
+        if (customColor != null) {
+            for (ThemePreviewCard card : themeCards) {
+                card.updateCustomColor(customColor);
+            }
+        }
+
+        if (!settings.backgroundImagePath.isBlank()) {
+            applyBackgroundSettings();
+        } else {
+            backgroundStatusLabel.setText(Strings.get("appearance.backgroundOff"));
+        }
+    }
+
+    public void reload() {
+        loadValues();
+    }
+
+    private void notifyChanged() {
+        if (onAppearanceChanged != null) {
+            onAppearanceChanged.run();
+        }
+    }
+
+    private void report(String message) {
+        if (statusReporter != null) {
+            statusReporter.accept(message);
+        }
+    }
+}

@@ -1,0 +1,214 @@
+package by.agro.launcher.core;
+
+import java.io.IOException;
+import java.nio.file.Files;
+
+
+
+public final class Settings {
+    public int maxRamMb = defaultRam();
+    public int minRamMb = 512;
+    public String javaPath = "";
+    public boolean useManagedJava = true;
+    public String javaMode = "";
+    public boolean offlineMode = false;
+    public String extraJvmArgs = "";
+    public String extraGameArgs = "";
+    public int windowWidth = 854;
+    public int windowHeight = 480;
+    public boolean fullscreen = false;
+    public boolean closeOnLaunch = false;
+    public boolean showConsole = true;
+    public boolean keepLauncherOpen = true;
+    public int downloadParallelism = defaultDownloadParallelism();
+    public boolean metadataCacheEnabled = true;
+    public int metadataCacheTtlMinutes = 360;
+    public int metadataSearchCacheTtlMinutes = 10;
+
+    
+    public String selectedVersion = "";
+
+    
+    public String selectedLoader = "vanilla";
+
+    
+    public String selectedLoaderVersion = "";
+
+    
+    public String selectedModBuildId = "";
+
+    
+    public boolean showSnapshots = false;
+
+    
+    public boolean showOldVersions = false;
+
+    
+    public String activeAccountId = "";
+
+    
+    public boolean optimizedJvmFlags = true;
+
+    
+
+    
+    public String language = "";
+
+    
+    public String themePreset = "EMERALD_DARK";
+
+    
+    public String customAccentColor = "#10B981";
+
+    /** Gradient mode: NONE or CUSTOM. */
+    public String gradientPreset = "NONE";
+
+    /** Comma-separated custom gradient colors, limited to ten valid hex colors. */
+    public String customGradientColors = "#10B981,#38BDF8";
+
+    
+    public String backgroundImagePath = "";
+
+    
+    public boolean backgroundBlur = false;
+
+    
+    public int backgroundBlurRadius = 12;
+
+    
+    public int backgroundDimPercent = 45;
+
+    
+    public int panelOpacityPercent = 88;
+
+    
+    public int windowOpacityPercent = 100;
+
+    
+
+    
+    public String modSearchSort = "downloads";
+
+    
+    public boolean installModDependencies = true;
+
+    
+    public String elyOAuthAuthorizationEndpoint = "";
+    public String elyOAuthTokenEndpoint = "";
+    public String elyOAuthProfileEndpoint = "";
+    public String elyOAuthClientId = "";
+    public int elyOAuthCallbackPort = 0;
+    public String elyOAuthScope = "";
+    public int elyOAuthTimeoutSeconds = 180;
+    public String elySkinUrlTemplate = "https://skinsystem.ely.by/skins/{username}.png";
+
+    
+    public String githubRepository = "AgroV2/AgroLauncher";
+
+    
+    private static int defaultDownloadParallelism() {
+        return clamp(Runtime.getRuntime().availableProcessors() * 2, 4, 16);
+    }
+
+    private static int defaultRam() {
+        long totalMb = SystemInfo.totalRamMb();
+        if (totalMb <= 0) {
+            return 2048;
+        }
+        long half = totalMb / 2;
+        long clamped = Math.max(1024, Math.min(8192, half));
+        return (int) (clamped / 512 * 512);
+    }
+
+    public static Settings load() {
+        LauncherPaths paths = LauncherPaths.get();
+        try {
+            if (Files.exists(paths.settingsFile())) {
+                Settings loaded = Json.read(paths.settingsFile(), Settings.class);
+                if (loaded != null) {
+                    loaded.normalize();
+                    return loaded;
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Не удалось прочитать settings.json, используются значения по умолчанию: " + e.getMessage());
+        }
+        return new Settings();
+    }
+
+    public void save() {
+        try {
+            normalize();
+            Json.write(LauncherPaths.get().settingsFile(), this);
+        } catch (IOException e) {
+            System.err.println("Не удалось сохранить настройки: " + e.getMessage());
+        }
+    }
+
+    
+    private void normalize() {
+        if (maxRamMb < 512) maxRamMb = 512;
+        long limit = Math.max(2048, SystemInfo.totalRamMb());
+        if (maxRamMb > limit) maxRamMb = (int) limit;
+        if (minRamMb < 0) minRamMb = 0;
+        if (minRamMb > maxRamMb) minRamMb = Math.min(512, maxRamMb);
+        if (windowWidth < 320) windowWidth = 854;
+        if (windowHeight < 240) windowHeight = 480;
+        downloadParallelism = clamp(downloadParallelism, 1, 32);
+        metadataCacheTtlMinutes = clamp(metadataCacheTtlMinutes, 1, 10080);
+        metadataSearchCacheTtlMinutes = clamp(metadataSearchCacheTtlMinutes, 1, 1440);
+        if (selectedLoader == null || selectedLoader.isBlank()) selectedLoader = "vanilla";
+        if (selectedModBuildId == null) selectedModBuildId = "";
+        if (javaPath == null) javaPath = "";
+        if (javaMode == null || javaMode.isBlank()) {
+            javaMode = !javaPath.isBlank() ? "CUSTOM" : (useManagedJava ? "MANAGED" : "AUTO");
+        }
+        try {
+            by.agro.launcher.jvm.JavaSelection.Mode.valueOf(javaMode.toUpperCase(java.util.Locale.ROOT));
+            javaMode = javaMode.toUpperCase(java.util.Locale.ROOT);
+        } catch (IllegalArgumentException e) {
+            javaMode = "AUTO";
+        }
+        useManagedJava = "MANAGED".equals(javaMode);
+
+        
+        if (themePreset == null || themePreset.isBlank()) themePreset = "EMERALD_DARK";
+        if (customAccentColor == null || customAccentColor.isBlank()) customAccentColor = "#10B981";
+        if (gradientPreset == null || gradientPreset.isBlank()) gradientPreset = "NONE";
+        gradientPreset = gradientPreset.toUpperCase(java.util.Locale.ROOT);
+        try {
+            by.agro.launcher.ui.theme.GradientPreset.valueOf(gradientPreset);
+        } catch (IllegalArgumentException e) {
+            gradientPreset = "NONE";
+        }
+        if (customGradientColors == null || customGradientColors.isBlank()) {
+            customGradientColors = "#10B981,#38BDF8";
+        } else {
+            java.util.List<String> gradientColors = java.util.Arrays.stream(customGradientColors.split(","))
+                    .map(String::trim)
+                    .filter(color -> color.matches("(?i)#[0-9a-f]{6}"))
+                    .limit(10)
+                    .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
+            if (gradientColors.isEmpty()) {
+                customGradientColors = "#10B981,#38BDF8";
+            } else {
+                if (gradientColors.size() == 1) gradientColors.add(gradientColors.get(0));
+                customGradientColors = String.join(",", gradientColors);
+            }
+        }
+        if (backgroundImagePath == null) backgroundImagePath = "";
+        backgroundBlurRadius = clamp(backgroundBlurRadius, 1, 60);
+        backgroundDimPercent = clamp(backgroundDimPercent, 0, 90);
+        panelOpacityPercent = clamp(panelOpacityPercent, 40, 100);
+        windowOpacityPercent = clamp(windowOpacityPercent, 20, 100);
+        if (modSearchSort == null || modSearchSort.isBlank()) modSearchSort = "downloads";
+        if (elyOAuthCallbackPort < 0 || elyOAuthCallbackPort > 65535) elyOAuthCallbackPort = 0;
+        if (elyOAuthTimeoutSeconds <= 0) elyOAuthTimeoutSeconds = 180;
+        if (elySkinUrlTemplate == null) elySkinUrlTemplate = "";
+        if (language == null) language = "";
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+}
