@@ -29,7 +29,7 @@ public final class LaunchOptions {
     public String authlibServer;
 
     public String launcherName = "AgroLauncher";
-    public String launcherVersion = "1.2.0";
+    public String launcherVersion = "1.3.0";
 
     public LaunchOptions() {
     }

@@ -240,11 +240,7 @@ public final class LauncherPaths {
         return instancesDir().resolve(safePathSegment(profileId, "profile ID"));
     }
 
-    /**
-     * Returns a separate writable game directory for one exact Minecraft/loader combination.
-     * Shared immutable downloads (versions, libraries and assets) remain in {@link #gameDir()},
-     * while mods, configs, saves and loader-generated runtime files cannot leak between installs.
-     */
+
     public Path installationGameDir(String minecraftVersion, String loaderType, String loaderVersion) {
         String minecraft = safePathSegment(minecraftVersion, "Minecraft version");
         String loader = safePathSegment(
@@ -365,9 +361,7 @@ public final class LauncherPaths {
                 || value.indexOf('/') >= 0 || value.indexOf('\\') >= 0) {
             throw new IllegalArgumentException("Unsafe " + description + ": " + value);
         }
-        // Maven versions commonly use SemVer build metadata (for example
-        // Quilt's 0.3.0+build.17). Dots and '+' are safe inside a single
-        // path segment; separators and traversal are rejected above.
+
         String pattern = allowDots ? "[A-Za-z0-9_.-]+" : "[A-Za-z0-9_.+~-]+";
         if (!value.matches(pattern)) {
             throw new IllegalArgumentException("Invalid " + description + ": " + value);
