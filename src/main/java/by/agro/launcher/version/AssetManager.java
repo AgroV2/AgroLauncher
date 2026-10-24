@@ -31,7 +31,7 @@ public final class AssetManager {
 
     public Path downloadAssets(ResolvedVersion version, ProgressListener listener) throws IOException {
         if (version.assetIndex == null || version.assetIndex.url == null) {
-            listener.onMessage("У версии нет индекса ассетов — пропускаем");
+            listener.onMessage(by.agro.launcher.i18n.Strings.get("assets.noIndex"));
             return paths.assetsDir();
         }
 

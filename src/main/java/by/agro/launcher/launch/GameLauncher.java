@@ -1,8 +1,10 @@
 package by.agro.launcher.launch;
 
 import by.agro.launcher.auth.Account;
+import by.agro.launcher.auth.AccountStorage;
 import by.agro.launcher.auth.AuthlibInjector;
 import by.agro.launcher.auth.ElyByAuth;
+import by.agro.launcher.auth.ElyByOAuth;
 import by.agro.launcher.core.Downloader;
 import by.agro.launcher.core.LauncherPaths;
 import by.agro.launcher.core.ProgressListener;
@@ -41,8 +43,14 @@ public final class GameLauncher {
     private final JavaManager javaManager;
     private final AuthlibInjector authlibInjector;
     private final LaunchCommandBuilder commandBuilder;
+    private final AccountStorage accounts;
 
     public GameLauncher(LauncherPaths paths, Downloader downloader, Settings settings, JavaManager javaManager) {
+        this(paths, downloader, settings, javaManager, null);
+    }
+
+    public GameLauncher(LauncherPaths paths, Downloader downloader, Settings settings, JavaManager javaManager,
+                        AccountStorage accounts) {
         this.paths = paths;
         this.downloader = downloader;
         this.settings = settings;
@@ -52,6 +60,7 @@ public final class GameLauncher {
         this.javaManager = javaManager;
         this.authlibInjector = new AuthlibInjector(paths, downloader);
         this.commandBuilder = new LaunchCommandBuilder(paths);
+        this.accounts = accounts;
     }
     
     private Rule.FeatureSet featureSet() {
@@ -69,6 +78,12 @@ public final class GameLauncher {
 
     private PreparedLaunch prepareLaunch(String versionId, Account account, VersionManifest manifest,
                                          ProgressListener listener, Path launchGameDir) throws IOException {
+        return prepareLaunch(versionId, account, manifest, listener, launchGameDir, "");
+    }
+
+    private PreparedLaunch prepareLaunch(String versionId, Account account, VersionManifest manifest,
+                                         ProgressListener listener, Path launchGameDir,
+                                         String quickPlayServer) throws IOException {
         paths.ensureDirectories();
 
         listener.onMessage(Strings.get("progress.versionPrepare", versionId));
@@ -96,9 +111,9 @@ public final class GameLauncher {
         LaunchPreflight preflight = new LaunchPreflight(javaSelection, memory, List.of());
         preflight.requireValid();
         String javaExecutable = javaSelection.executableText();
-        listener.onMessage("Required Java " + javaSelection.requiredMajor + ", selected Java "
-                + javaSelection.detectedMajor + " (" + javaSelection.reason + ")");
-        listener.onMessage("Recommended RAM: " + memory.recommendedMinMb + "–" + memory.recommendedMaxMb + " MB");
+        listener.onMessage(Strings.get("launch.javaSelected", javaSelection.requiredMajor,
+                javaSelection.detectedMajor, javaSelection.reason));
+        listener.onMessage(Strings.get("launch.ramRecommended", memory.recommendedMinMb, memory.recommendedMaxMb));
 
         
         LaunchOptions options = new LaunchOptions();
@@ -110,10 +125,11 @@ public final class GameLauncher {
         options.nativesDir = nativesDir;
         options.javaExecutable = javaExecutable;
         options.loaderType = settings.selectedLoader == null ? "vanilla" : settings.selectedLoader;
+        options.quickPlayServer = quickPlayServer == null ? "" : quickPlayServer;
 
         if (!account.isOffline() && !policy.offline()) {
             listener.onProgress(Strings.get("progress.auth"), 0, 1, account.username);
-            ElyByAuth.ensureValidToken(account);
+            ensureAccountToken(account);
             options.authlibInjectorJar = authlibInjector.ensureInstalled(listener);
             options.authlibServer = ElyByAuth.INJECTOR_ARGUMENT;
             listener.onProgress(Strings.get("progress.auth"), 1, 1, Strings.get("progress.tokenValid"));
@@ -138,15 +154,21 @@ public final class GameLauncher {
     public GameProcess launch(String versionId, Account account, VersionManifest manifest,
                               ProgressListener listener, Consumer<String> onLine, IntConsumer onExit,
                               Path launchGameDir) throws IOException {
+        return launch(versionId, account, manifest, listener, onLine, onExit, launchGameDir, "");
+    }
+
+    public GameProcess launch(String versionId, Account account, VersionManifest manifest,
+                              ProgressListener listener, Consumer<String> onLine, IntConsumer onExit,
+                              Path launchGameDir, String quickPlayServer) throws IOException {
         Path gameDir = launchGameDir != null ? launchGameDir : paths.gameDir();
-        PreparedLaunch prepared = prepareLaunch(versionId, account, manifest, listener, gameDir);
+        PreparedLaunch prepared = prepareLaunch(versionId, account, manifest, listener, gameDir, quickPlayServer);
         List<String> command = prepared.command();
 
         String loader = settings.selectedLoader == null ? "vanilla" : settings.selectedLoader;
         Integer javaMajor = detectJavaMajor(command.isEmpty() ? null : command.get(0));
         LaunchSession session = new LaunchSession(paths.logsDir(), versionId, loader, javaMajor,
                 command.isEmpty() ? null : command.get(0), settings.maxRamMb, command, gameDir);
-        listener.onMessage("Запуск: " + Redactor.renderCommand(command));
+        listener.onMessage(Strings.get("launch.command", Redactor.renderCommand(command)));
         String javaWarning = JavaRuntimeWarning.forSelection(prepared.javaSelection());
         if (javaWarning != null && onLine != null) {
             onLine.accept(javaWarning);
@@ -156,6 +178,45 @@ public final class GameLauncher {
         } catch (IOException e) {
             session.close();
             throw e;
+        }
+    }
+
+    private void ensureAccountToken(Account account) throws IOException {
+        if (accounts != null) {
+            accounts.awaitSecrets();
+        }
+        if (account.type == Account.Type.ELY_BY_OAUTH) {
+            long expiresAt = account.tokenExpiresAt;
+            if (expiresAt > 0 && System.currentTimeMillis() < expiresAt - 60_000L) {
+                return;
+            }
+            if (ElyByAuth.validate(account)) {
+                persistAccount(account);
+                return;
+            }
+            ElyByOAuth.Config config = oauthConfig();
+            if (config.complete() && account.clientToken != null && !account.clientToken.isBlank()) {
+                ElyByOAuth.refresh(config, account);
+                persistAccount(account);
+                return;
+            }
+            throw new ElyByAuth.AuthException("IllegalArgumentException",
+                    Strings.get("auth.oauthExpired"));
+        }
+        ElyByAuth.ensureValidToken(account);
+        persistAccount(account);
+    }
+
+    private ElyByOAuth.Config oauthConfig() {
+        return new ElyByOAuth.Config(
+                settings.elyOAuthAuthorizationEndpoint, settings.elyOAuthTokenEndpoint,
+                settings.elyOAuthProfileEndpoint, settings.elyOAuthClientId,
+                settings.elyOAuthScope, settings.elyOAuthCallbackPort, settings.elyOAuthTimeoutSeconds);
+    }
+
+    private void persistAccount(Account account) {
+        if (accounts != null) {
+            accounts.save(account);
         }
     }
 
@@ -173,29 +234,33 @@ public final class GameLauncher {
         return null;
     }
 
+    private boolean verifyOnce(Path file, String expectedSha1) {
+        return downloader.verifyOnce(file, expectedSha1);
+    }
+
     private void verifyLocalInstallation(ResolvedVersion version) throws IOException {
         Path client = paths.versionJar(version.jarVersionId);
-        if (!by.agro.launcher.core.HashUtil.verify(client,
+        if (!verifyOnce(client,
                 version.clientDownload == null ? null : version.clientDownload.sha1)) {
             throw new IOException("Offline launch blocked: client JAR is missing or failed integrity verification");
         }
         for (Library library : version.applicableLibraries(featureSet())) {
             Library.Artifact artifact = library.resolveArtifact();
             Path file = paths.librariesDir().resolve(library.relativePath());
-            if (!by.agro.launcher.core.HashUtil.verify(file, artifact == null ? null : artifact.sha1)) {
+            if (!verifyOnce(file, artifact == null ? null : artifact.sha1)) {
                 throw new IOException("Offline launch blocked: library is missing or invalid: " + library.name);
             }
         }
         if (version.assetIndex != null && version.assetIndex.id != null) {
             Path index = paths.assetIndexesDir().resolve(version.assetIndex.id + ".json");
-            if (!by.agro.launcher.core.HashUtil.verify(index, version.assetIndex.sha1)) {
+            if (!verifyOnce(index, version.assetIndex.sha1)) {
                 throw new IOException("Offline launch blocked: asset index is missing or invalid");
             }
             com.google.gson.JsonObject objects = by.agro.launcher.core.Json.object(
                     by.agro.launcher.core.Json.readObject(index), "objects");
             if (objects != null) for (String key : objects.keySet()) {
                 String hash = by.agro.launcher.core.Json.string(objects.getAsJsonObject(key), "hash", null);
-                if (hash == null || hash.length() < 2 || !by.agro.launcher.core.HashUtil.verify(
+                if (hash == null || hash.length() < 2 || !verifyOnce(
                         paths.assetObjectsDir().resolve(hash.substring(0, 2)).resolve(hash), hash)) {
                     throw new IOException("Offline launch blocked: asset is missing or invalid: " + key);
                 }

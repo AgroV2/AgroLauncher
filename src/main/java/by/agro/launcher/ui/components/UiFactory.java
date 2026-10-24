@@ -59,7 +59,35 @@ public final class UiFactory {
         return panel;
     }
 
+    private static volatile boolean liveResize;
+
+    public static void setLiveResize(boolean active) {
+        liveResize = active;
+    }
+
+    private static java.awt.Color mix(java.awt.Color first, java.awt.Color second, float secondWeight) {
+        float weight = Math.max(0f, Math.min(1f, secondWeight));
+        float firstWeight = 1f - weight;
+        return new java.awt.Color(
+                Math.round(first.getRed() * firstWeight + second.getRed() * weight),
+                Math.round(first.getGreen() * firstWeight + second.getGreen() * weight),
+                Math.round(first.getBlue() * firstWeight + second.getBlue() * weight));
+    }
+
     private static final class TranslucentCard extends JPanel {
+        private static final java.awt.BasicStroke GLASS_STROKE = new java.awt.BasicStroke(1f);
+
+
+        private int cacheWidth = -1;
+        private int cacheHeight = -1;
+        private int cacheKeyBg;
+        private int cacheKeyAccent;
+        private int cacheKeyOpacity = -1;
+        private boolean cacheKeyFast;
+        private java.awt.Paint glassPaint;
+        private java.awt.Color glassEdge;
+        private boolean glassFast;
+
         TranslucentCard() {
             setOpaque(false);
         }
@@ -69,12 +97,70 @@ public final class UiFactory {
             java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
             g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
                     java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(cardBackground());
-            g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
-            g2.setColor(AgroTheme.border());
-            g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+            int arc = AgroTheme.cardArc();
+            if (AgroTheme.isLiquidGlass()) {
+                paintLiquidGlass(g2, arc);
+            } else {
+                g2.setColor(cardBackground());
+                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
+                g2.setColor(AgroTheme.border());
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
+            }
             g2.dispose();
             super.paintComponent(g);
+        }
+
+        private void paintLiquidGlass(java.awt.Graphics2D g2, int arc) {
+            int width = getWidth();
+            int height = getHeight();
+            prepareGlassCache(width, height);
+
+            g2.setPaint(glassPaint);
+            g2.fillRoundRect(0, 0, width - 1, height - 1, arc, arc);
+
+            if (!glassFast) {
+                g2.setStroke(GLASS_STROKE);
+                g2.setColor(glassEdge);
+                g2.drawRoundRect(0, 0, width - 1, height - 1, arc, arc);
+            }
+        }
+
+        private void prepareGlassCache(int width, int height) {
+            boolean fast = liveResize;
+            int bgKey = AgroTheme.bgPanel().getRGB();
+            int accentKey = AgroTheme.accent().getRGB();
+            if (width == cacheWidth && height == cacheHeight && bgKey == cacheKeyBg
+                    && accentKey == cacheKeyAccent && cardOpacityPercent == cacheKeyOpacity
+                    && fast == cacheKeyFast) {
+                return;
+            }
+            cacheWidth = width;
+            cacheHeight = height;
+            cacheKeyBg = bgKey;
+            cacheKeyAccent = accentKey;
+            cacheKeyOpacity = cardOpacityPercent;
+            cacheKeyFast = fast;
+            glassFast = fast;
+
+            java.awt.Color base = AgroTheme.bgPanel();
+            java.awt.Color accent = AgroTheme.accent();
+            java.awt.Color tint = mix(base, accent, 0.14f);
+            int alpha = Math.min(200, Math.max(52,
+                    Math.round(255 * cardOpacityPercent / 100f * 0.6f)));
+            java.awt.Color bottom = new java.awt.Color(
+                    tint.getRed(), tint.getGreen(), tint.getBlue(), alpha);
+            if (fast) {
+                glassPaint = bottom;
+                glassEdge = null;
+                return;
+            }
+            java.awt.Color topTint = mix(tint, java.awt.Color.WHITE, 0.22f);
+            java.awt.Color top = new java.awt.Color(
+                    topTint.getRed(), topTint.getGreen(), topTint.getBlue(),
+                    Math.min(255, alpha + 42));
+            glassPaint = new java.awt.GradientPaint(0, 0, top, 0, Math.max(1, height), bottom);
+            java.awt.Color edge = mix(AgroTheme.border(), accent, 0.30f);
+            glassEdge = new java.awt.Color(edge.getRed(), edge.getGreen(), edge.getBlue(), 150);
         }
     }
 

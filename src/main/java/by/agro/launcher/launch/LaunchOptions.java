@@ -21,7 +21,6 @@ public final class LaunchOptions {
 
     public String javaExecutable;
 
-    /** Loader selected for this launch; used for loader-specific command compatibility. */
     public String loaderType = "vanilla";
 
     public Path authlibInjectorJar;
@@ -29,7 +28,9 @@ public final class LaunchOptions {
     public String authlibServer;
 
     public String launcherName = "AgroLauncher";
-    public String launcherVersion = "1.3.0";
+    public String launcherVersion = by.agro.launcher.core.LauncherVersion.VERSION;
+
+    public String quickPlayServer = "";
 
     public LaunchOptions() {
     }

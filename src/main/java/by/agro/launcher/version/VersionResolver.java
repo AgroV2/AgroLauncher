@@ -38,7 +38,7 @@ public final class VersionResolver {
             if (remote == null || remote.url == null) {
                 throw new IOException("Version " + versionId + " was found neither locally nor in the Mojang manifest");
             }
-            listener.onMessage("Загрузка описания версии " + versionId);
+            listener.onMessage(by.agro.launcher.i18n.Strings.get("resolver.downloadingVersion", versionId));
             Files.createDirectories(file.getParent());
             downloader.download(remote.url, file, remote.sha1);
         }

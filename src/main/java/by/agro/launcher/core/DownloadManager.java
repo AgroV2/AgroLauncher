@@ -11,7 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-/** Thread-safe shared state for every file download performed by the launcher. */
+
 public final class DownloadManager {
     public enum Status { QUEUED, RUNNING, PAUSED, COMPLETED, FAILED, CANCELLED }
 
@@ -98,7 +98,7 @@ public final class DownloadManager {
     public Handle queued(String name, String url, Path target, long totalBytes) {
         Handle handle = new Handle(name, url, target, totalBytes);
         tasks.put(handle.id(), handle);
-        changed();
+        changed(true);
         return handle;
     }
 
@@ -109,7 +109,7 @@ public final class DownloadManager {
         handle.updatedNanos = handle.startedNanos;
         handle.error = null;
         handle.status = Status.RUNNING;
-        changed();
+        changed(true);
     }
 
     public void advanced(Handle handle, long bytes) throws CancelledException {
@@ -119,15 +119,15 @@ public final class DownloadManager {
         changed();
     }
 
-    public void pause(Handle handle) { handle.pause(); changed(); }
-    public void resume(Handle handle) { handle.resume(); changed(); }
-    public void cancel(Handle handle) { handle.cancel(); changed(); }
+    public void pause(Handle handle) { handle.pause(); changed(true); }
+    public void resume(Handle handle) { handle.resume(); changed(true); }
+    public void cancel(Handle handle) { handle.cancel(); changed(true); }
 
-    public void completed(Handle handle) { handle.status = Status.COMPLETED; changed(); }
+    public void completed(Handle handle) { handle.status = Status.COMPLETED; changed(true); }
     public void failed(Handle handle, Throwable error) {
         handle.error = error == null ? null : error.getMessage();
         handle.status = error instanceof CancelledException ? Status.CANCELLED : Status.FAILED;
-        changed();
+        changed(true);
     }
 
     public void retry(Handle handle) {
@@ -136,7 +136,7 @@ public final class DownloadManager {
         handle.paused.set(false);
         handle.error = null;
         handle.status = Status.QUEUED;
-        changed();
+        changed(true);
     }
 
     public List<Handle> snapshot() {
@@ -147,5 +147,20 @@ public final class DownloadManager {
 
     public void addListener(Listener listener) { listeners.add(listener); }
     public void removeListener(Listener listener) { listeners.remove(listener); }
-    private void changed() { for (Listener listener : listeners) listener.downloadsChanged(); }
+
+    private static final long NOTIFY_INTERVAL_NANOS = 33_000_000L;
+    private volatile long lastNotifyNanos;
+
+    private void changed() {
+        changed(false);
+    }
+
+    private void changed(boolean force) {
+        long now = System.nanoTime();
+        if (!force && now - lastNotifyNanos < NOTIFY_INTERVAL_NANOS) {
+            return;
+        }
+        lastNotifyNanos = now;
+        for (Listener listener : listeners) listener.downloadsChanged();
+    }
 }

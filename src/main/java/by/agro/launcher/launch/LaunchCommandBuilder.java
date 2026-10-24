@@ -30,9 +30,12 @@ public final class LaunchCommandBuilder {
         private final boolean customResolution;
         private final boolean demo;
 
-        Features(boolean customResolution, boolean demo) {
+        private final boolean quickPlayMultiplayer;
+
+        Features(boolean customResolution, boolean demo, boolean quickPlayMultiplayer) {
             this.customResolution = customResolution;
             this.demo = demo;
+            this.quickPlayMultiplayer = quickPlayMultiplayer;
         }
 
         @Override
@@ -43,8 +46,9 @@ public final class LaunchCommandBuilder {
                 case "is_demo_user":
                     return demo;
                 case "has_quick_plays_support":
-                case "is_quick_play_singleplayer":
                 case "is_quick_play_multiplayer":
+                    return quickPlayMultiplayer;
+                case "is_quick_play_singleplayer":
                 case "is_quick_play_realms":
                     return false;
                 default:
@@ -57,7 +61,8 @@ public final class LaunchCommandBuilder {
     public List<String> build(LaunchOptions options) {
         ResolvedVersion version = options.version;
         boolean customResolution = !options.settings.fullscreen;
-        Rule.FeatureSet features = new Features(customResolution, false);
+        boolean quickPlayMultiplayer = options.quickPlayServer != null && !options.quickPlayServer.isBlank();
+        Rule.FeatureSet features = new Features(customResolution, false, quickPlayMultiplayer);
 
         Map<String, String> placeholders = buildPlaceholders(options, features);
         List<String> command = new ArrayList<>();
@@ -129,10 +134,81 @@ public final class LaunchCommandBuilder {
             command.add(String.valueOf(options.settings.windowHeight));
         }
 
-        
+        addServerArguments(command, options.quickPlayServer);
+
         command.addAll(splitArguments(options.settings.extraGameArgs));
 
         return command;
+    }
+
+    private void addServerArguments(List<String> command, String rawAddress) {
+        if (rawAddress == null || rawAddress.isBlank()) {
+            return;
+        }
+
+        String address = rawAddress.trim();
+        if (containsArgument(command, "--quickPlayMultiplayer")) {
+            return;
+        }
+
+        ServerAddress server = ServerAddress.parse(address);
+        if (!containsArgument(command, "--server")) {
+            command.add("--server");
+            command.add(server.host);
+        }
+        if (server.port != null && !containsArgument(command, "--port")) {
+            command.add("--port");
+            command.add(server.port);
+        }
+    }
+
+    private static final class ServerAddress {
+        private final String host;
+        private final String port;
+
+        private ServerAddress(String host, String port) {
+            this.host = host;
+            this.port = port;
+        }
+
+        private static ServerAddress parse(String address) {
+            if (address.startsWith("[")) {
+                int closingBracket = address.indexOf(']');
+                if (closingBracket > 0) {
+                    String host = address.substring(1, closingBracket);
+                    String suffix = address.substring(closingBracket + 1);
+                    return new ServerAddress(host, validPortSuffix(suffix));
+                }
+            }
+
+            int firstColon = address.indexOf(':');
+            int lastColon = address.lastIndexOf(':');
+            if (firstColon > 0 && firstColon == lastColon) {
+                String port = validPortSuffix(address.substring(lastColon));
+                if (port != null) {
+                    return new ServerAddress(address.substring(0, lastColon), port);
+                }
+            }
+            return new ServerAddress(address, null);
+        }
+
+        private static String validPortSuffix(String suffix) {
+            if (suffix == null || suffix.length() < 2 || suffix.charAt(0) != ':') {
+                return null;
+            }
+            String port = suffix.substring(1);
+            for (int i = 0; i < port.length(); i++) {
+                if (!Character.isDigit(port.charAt(i))) {
+                    return null;
+                }
+            }
+            try {
+                int value = Integer.parseInt(port);
+                return value >= 1 && value <= 65535 ? port : null;
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
     }
 
     private List<String> buildGameArguments(LaunchOptions options, Rule.FeatureSet features,
@@ -210,7 +286,8 @@ public final class LaunchCommandBuilder {
         map.put("auth_xuid", "");
         map.put("quickPlayPath", "");
         map.put("quickPlaySingleplayer", "");
-        map.put("quickPlayMultiplayer", "");
+        map.put("quickPlayMultiplayer", options.quickPlayServer == null
+                ? "" : options.quickPlayServer.trim());
         map.put("quickPlayRealms", "");
 
         return map;

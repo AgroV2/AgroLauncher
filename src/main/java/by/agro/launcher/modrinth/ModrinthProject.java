@@ -48,8 +48,8 @@ public final class ModrinthProject {
         Builder b = new Builder();
         b.id = Json.string(obj, "project_id", null);
         b.slug = Json.string(obj, "slug", b.id);
-        b.title = Json.string(obj, "title", "Без названия");
-        b.description = Json.string(obj, "description", "");
+        b.title = neutralizeHtml(Json.string(obj, "title", by.agro.launcher.i18n.Strings.get("browser.untitled")));
+        b.description = neutralizeHtml(Json.string(obj, "description", ""));
         b.author = Json.string(obj, "author", "");
         b.downloads = Json.longValue(obj, "downloads", 0);
         b.follows = Json.longValue(obj, "follows", 0);
@@ -68,8 +68,8 @@ public final class ModrinthProject {
         Builder b = new Builder();
         b.id = Json.string(obj, "id", null);
         b.slug = Json.string(obj, "slug", b.id);
-        b.title = Json.string(obj, "title", "Без названия");
-        b.description = Json.string(obj, "description", "");
+        b.title = neutralizeHtml(Json.string(obj, "title", by.agro.launcher.i18n.Strings.get("browser.untitled")));
+        b.description = neutralizeHtml(Json.string(obj, "description", ""));
         b.author = Json.string(obj, "author", "");
         b.downloads = Json.longValue(obj, "downloads", 0);
         b.follows = Json.longValue(obj, "followers", 0);
@@ -99,10 +99,10 @@ public final class ModrinthProject {
 
     public String formattedDownloads() {
         if (downloads >= 1_000_000) {
-            return String.format("%.1f млн", downloads / 1_000_000.0);
+            return String.format("%.1f %s", downloads / 1_000_000.0, by.agro.launcher.i18n.Strings.get("unit.million"));
         }
         if (downloads >= 1_000) {
-            return String.format("%.1f тыс.", downloads / 1_000.0);
+            return String.format("%.1f %s", downloads / 1_000.0, by.agro.launcher.i18n.Strings.get("unit.thousand"));
         }
         return String.valueOf(downloads);
     }
@@ -142,5 +142,17 @@ public final class ModrinthProject {
         String clientSide;
         String serverSide;
         String dateModified;
+    }
+    // JLabel и тултипы рендерят текст как HTML, если он начинается с <html;
+    // удалённые данные Modrinth не должны получить такой режим
+    static String neutralizeHtml(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() >= 5 && trimmed.substring(0, 5).equalsIgnoreCase("<html")) {
+            return " " + value;
+        }
+        return value;
     }
 }

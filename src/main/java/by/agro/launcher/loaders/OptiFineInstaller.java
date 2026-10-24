@@ -97,7 +97,7 @@ public final class OptiFineInstaller implements LoaderInstaller {
         Path installerJar = paths.installersDir().resolve(fileName);
 
         if (!Files.exists(installerJar)) {
-            listener.onProgress("Установка OptiFine", 0, 4, "загрузка " + fileName);
+            listener.onProgress(by.agro.launcher.i18n.Strings.get("optifine.stageTitle"), 0, 4, by.agro.launcher.i18n.Strings.get("loader.stageDownload", fileName));
             downloadOptiFine(fileName, installerJar, listener);
         }
         return installFromJar(minecraftVersion, edition, installerJar, listener);
@@ -122,21 +122,21 @@ public final class OptiFineInstaller implements LoaderInstaller {
         String optifineLibCoords = "optifine:OptiFine:" + minecraftVersion + "_" + edition;
         Path optifineLib = paths.libraryPath(optifineLibCoords);
 
-        listener.onProgress("Установка OptiFine", 1, 4, "патчинг клиента");
+        listener.onProgress(by.agro.launcher.i18n.Strings.get("optifine.stageTitle"), 1, 4, by.agro.launcher.i18n.Strings.get("optifine.stagePatch"));
         Files.createDirectories(optifineLib.getParent());
         runPatcher(installerJar, vanillaJar, optifineLib, listener);
 
-        listener.onProgress("Установка OptiFine", 2, 4, "извлечение launchwrapper");
+        listener.onProgress(by.agro.launcher.i18n.Strings.get("optifine.stageTitle"), 2, 4, by.agro.launcher.i18n.Strings.get("optifine.stageLaunchwrapper"));
         String launchwrapperCoords = extractLaunchwrapper(installerJar, listener);
 
-        listener.onProgress("Установка OptiFine", 3, 4, "создание профиля");
+        listener.onProgress(by.agro.launcher.i18n.Strings.get("optifine.stageTitle"), 3, 4, by.agro.launcher.i18n.Strings.get("optifine.stageProfile"));
         JsonObject profile = buildProfile(versionId, minecraftVersion, optifineLibCoords, launchwrapperCoords);
         Path target = paths.versionJson(versionId);
         Files.createDirectories(target.getParent());
         Json.write(target, profile);
 
-        listener.onProgress("Установка OptiFine", 4, 4, versionId);
-        listener.onMessage("OptiFine установлен: " + versionId);
+        listener.onProgress(by.agro.launcher.i18n.Strings.get("optifine.stageTitle"), 4, 4, versionId);
+        listener.onMessage(by.agro.launcher.i18n.Strings.get("loader.installed", versionId));
         return versionId;
     }
 
@@ -169,7 +169,7 @@ public final class OptiFineInstaller implements LoaderInstaller {
             while ((line = reader.readLine()) != null) {
                 if (line.startsWith("Same:") || line.startsWith("Patching:") || line.startsWith("Copy:")) {
                     if (++counter % 500 == 0) {
-                        listener.onProgress("Патчинг OptiFine", counter, 0, "обработано: " + counter);
+                        listener.onProgress(by.agro.launcher.i18n.Strings.get("optifine.patching"), counter, 0, by.agro.launcher.i18n.Strings.get("loader.filesProcessed", counter));
                     }
                     continue;
                 }
@@ -221,11 +221,11 @@ public final class OptiFineInstaller implements LoaderInstaller {
                         Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
                     }
                 }
-                listener.onMessage("launchwrapper извлечён: " + version);
+                listener.onMessage(by.agro.launcher.i18n.Strings.get("optifine.launchwrapperExtracted", version));
                 return coords;
             }
         }
-        listener.onMessage("Собственный launchwrapper не найден, используется net.minecraft:launchwrapper:1.12");
+        listener.onMessage(by.agro.launcher.i18n.Strings.get("optifine.launchwrapperFallback"));
         return "net.minecraft:launchwrapper:1.12";
     }
 
@@ -281,6 +281,6 @@ public final class OptiFineInstaller implements LoaderInstaller {
         Files.createDirectories(modsDir);
         Path target = modsDir.resolve(installerJar.getFileName());
         Files.copy(installerJar, target, StandardCopyOption.REPLACE_EXISTING);
-        listener.onMessage("OptiFine добавлен в mods: " + target.getFileName());
+        listener.onMessage(by.agro.launcher.i18n.Strings.get("optifine.addedToMods", target.getFileName()));
     }
 }

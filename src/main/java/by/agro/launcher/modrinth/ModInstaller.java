@@ -70,15 +70,17 @@ public final class ModInstaller {
         Path destination = destinationFor(projectType);
         Files.createDirectories(destination);
 
-        installRecursive(version, projectType, destination, loader, gameVersion, withDependencies,
-                visited, result, listener, 0);
+        List<ModrinthVersion> pending = new ArrayList<>();
+        collectDownloads(version, projectType, destination, loader, gameVersion, withDependencies,
+                visited, result, listener, pending, 0);
+        downloadPending(pending, destination, result, listener);
         return result;
     }
 
-    private void installRecursive(ModrinthVersion version, String projectType, Path destination,
+    private void collectDownloads(ModrinthVersion version, String projectType, Path destination,
                                   String loader, String gameVersion, boolean withDependencies,
                                   Set<String> visited, Result result,
-                                  ProgressListener listener, int depth) {
+                                  ProgressListener listener, List<ModrinthVersion> pending, int depth) {
         if (version == null || depth > MAX_DEPTH) {
             return;
         }
@@ -88,33 +90,20 @@ public final class ModInstaller {
 
         ModrinthVersion.File file = version.primaryFile();
         if (file == null || file.url == null) {
-            result.failed.add(version.versionNumber + " (нет файла для загрузки)");
-            return;
-        }
-
-        final Path target;
-        final Path disabled;
-        try {
-            target = safeDestinationPath(destination, file.filename);
-            disabled = safeDestinationPath(destination, file.filename + ".disabled");
-        } catch (IllegalArgumentException e) {
-            result.failed.add(file.filename + ": " + e.getMessage());
-            listener.onMessage(by.agro.launcher.i18n.Strings.get("install.downloadFailed", file.filename, e.getMessage()));
+            result.failed.add(by.agro.launcher.i18n.Strings.get("install.noFile", version.versionNumber));
             return;
         }
 
         try {
+            Path target = safeDestinationPath(destination, file.filename);
+            Path disabled = safeDestinationPath(destination, file.filename + ".disabled");
             if (Files.exists(target) || Files.exists(disabled)) {
                 result.skipped.add(file.filename);
                 listener.onMessage(by.agro.launcher.i18n.Strings.get("install.alreadyInstalled", file.filename));
             } else {
-                listener.onProgress(by.agro.launcher.i18n.Strings.get("install.stage"), result.installed.size(), 0, file.filename);
-                downloader.download(file.url, target, file.sha1);
-                recordManagedMod(file);
-                result.installed.add(file.filename);
-                listener.onMessage(by.agro.launcher.i18n.Strings.get("install.installed", file.filename, file.formattedSize()));
+                pending.add(version);
             }
-        } catch (IOException e) {
+        } catch (IllegalArgumentException e) {
             result.failed.add(file.filename + ": " + e.getMessage());
             listener.onMessage(by.agro.launcher.i18n.Strings.get("install.downloadFailed", file.filename, e.getMessage()));
             return;
@@ -131,18 +120,69 @@ public final class ModInstaller {
             try {
                 ModrinthVersion dependencyVersion = resolveDependency(dependency, loader, gameVersion);
                 if (dependencyVersion == null) {
-                    result.failed.add("зависимость " + dependency.projectId
-                            + " (нет подходящей версии)");
+                    result.failed.add(by.agro.launcher.i18n.Strings.get("install.depNoVersion", dependency.projectId));
                     listener.onMessage(by.agro.launcher.i18n.Strings.get(
                             "install.depNotFound", dependency.projectId));
                     continue;
                 }
                 listener.onMessage(by.agro.launcher.i18n.Strings.get("install.fetchingDep", dependencyVersion.versionNumber));
-                installRecursive(dependencyVersion, projectType, destination, loader, gameVersion, true,
-                        visited, result, listener, depth + 1);
+                collectDownloads(dependencyVersion, projectType, destination, loader, gameVersion, true,
+                        visited, result, listener, pending, depth + 1);
             } catch (IOException e) {
-                result.failed.add("зависимость " + dependency.projectId + ": " + e.getMessage());
+                result.failed.add(by.agro.launcher.i18n.Strings.get("install.depError", dependency.projectId, e.getMessage()));
                 listener.onMessage(by.agro.launcher.i18n.Strings.get("install.depError", dependency.projectId, e.getMessage()));
+            }
+        }
+    }
+
+    private void downloadPending(List<ModrinthVersion> pending, Path destination, Result result,
+                                 ProgressListener listener) {
+        if (pending.isEmpty()) {
+            return;
+        }
+        if (pending.size() == 1) {
+            installOne(pending.get(0), destination, result, listener);
+            return;
+        }
+        int threads = Math.min(4, pending.size());
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threads, r -> {
+            Thread t = new Thread(r, "agro-mod-install");
+            t.setDaemon(true);
+            return t;
+        });
+        try {
+            for (ModrinthVersion version : pending) {
+                pool.submit(() -> installOne(version, destination, result, listener));
+            }
+        } finally {
+            pool.shutdown();
+            try {
+                pool.awaitTermination(10, java.util.concurrent.TimeUnit.MINUTES);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private void installOne(ModrinthVersion version, Path destination, Result result,
+                            ProgressListener listener) {
+        ModrinthVersion.File file = version.primaryFile();
+        try {
+            Path target = safeDestinationPath(destination, file.filename);
+            listener.onProgress(by.agro.launcher.i18n.Strings.get("install.stage"),
+                    Math.max(1, result.installed.size()), 0, file.filename);
+            downloader.download(file.url, target, file.sha1);
+            recordManagedMod(file);
+            synchronized (result) {
+                result.installed.add(file.filename);
+                listener.onMessage(by.agro.launcher.i18n.Strings.get(
+                        "install.installed", file.filename, file.formattedSize()));
+            }
+        } catch (IOException | RuntimeException e) {
+            synchronized (result) {
+                result.failed.add(file.filename + ": " + e.getMessage());
+                listener.onMessage(by.agro.launcher.i18n.Strings.get(
+                        "install.downloadFailed", file.filename, e.getMessage()));
             }
         }
     }

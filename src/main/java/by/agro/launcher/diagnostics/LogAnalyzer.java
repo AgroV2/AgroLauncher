@@ -1,5 +1,7 @@
 package by.agro.launcher.diagnostics;
 
+import by.agro.launcher.i18n.Strings;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -12,14 +14,19 @@ import java.util.regex.Pattern;
 public final class LogAnalyzer {
     private final Map<String, FindingState> findings = new LinkedHashMap<>();
     private final Map<String, ModIdentity> implicated = new LinkedHashMap<>();
-    private final List<ModIdentity> mods;
+    private final List<ModMatcher> matchers = new ArrayList<>();
 
     public LogAnalyzer() {
         this(List.of());
     }
 
     public LogAnalyzer(List<ModIdentity> mods) {
-        this.mods = mods == null ? List.of() : new ArrayList<>(mods);
+        List<ModIdentity> identities = mods == null ? List.of() : mods;
+        for (ModIdentity mod : identities) {
+            if (mod != null) {
+                matchers.add(new ModMatcher(mod));
+            }
+        }
     }
 
     public synchronized void accept(String line) {
@@ -27,72 +34,85 @@ public final class LogAnalyzer {
         List<ModIdentity> lineMods = matchMods(text);
         if (text.contains("unsupportedclassversionerror") || text.contains("compiled by a more recent version")
                 || text.contains("only recognizes class file versions")) {
-            add("JAVA_MISMATCH", "Несовместимая версия Java", "Выберите Java, требуемую этой версией Minecraft/loader.", lineMods);
+            add("JAVA_MISMATCH", Strings.get("diag.JAVA_MISMATCH.title"), Strings.get("diag.JAVA_MISMATCH.advice"), lineMods);
         }
         if (text.contains("outofmemoryerror") || text.contains("java heap space") || text.contains("gc overhead limit")) {
-            add("OUT_OF_MEMORY", "Недостаточно памяти Java", "Увеличьте RAM или уменьшите число модов/ресурспаков.", lineMods);
+            add("OUT_OF_MEMORY", Strings.get("diag.OUT_OF_MEMORY.title"), Strings.get("diag.OUT_OF_MEMORY.advice"), lineMods);
         }
         if (text.contains("classnotfoundexception") || text.contains("noclassdeffounderror")
                 || text.contains("module not found") || text.contains("could not find or load main class")) {
-            add("MISSING_CLASS", "Отсутствует класс или модуль", "Проверьте библиотеки, loader и совместимость модов.", lineMods);
+            add("MISSING_CLASS", Strings.get("diag.MISSING_CLASS.title"), Strings.get("diag.MISSING_CLASS.advice"), lineMods);
         }
         if (text.contains("requires") && (text.contains("mod") || text.contains("fabric") || text.contains("forge"))
                 || text.contains("missing mandatory dependencies") || text.contains("mod resolution encountered")) {
-            add("MOD_DEPENDENCY", "Не выполнена зависимость мода", "Установите требуемую версию зависимости или удалите несовместимый мод.", lineMods);
+            add("MOD_DEPENDENCY", Strings.get("diag.MOD_DEPENDENCY.title"), Strings.get("diag.MOD_DEPENDENCY.advice"), lineMods);
         }
         if (text.contains("mixin") && (text.contains("failed") || text.contains("error") || text.contains("exception"))) {
-            add("MIXIN_FAILURE", "Ошибка Mixin", "Проверьте совместимость модов и версий loader.", lineMods);
+            add("MIXIN_FAILURE", Strings.get("diag.MIXIN_FAILURE.title"), Strings.get("diag.MIXIN_FAILURE.advice"), lineMods);
         }
         if (text.contains("opengl") || text.contains("lwjgl") && text.contains("error")
                 || text.contains("unsatisfiedlinkerror") || text.contains("failed to load native")) {
-            add("NATIVE_OPENGL", "Ошибка native/OpenGL", "Обновите видеодрайвер и проверьте архитектуру Java/native-библиотек.", lineMods);
+            add("NATIVE_OPENGL", Strings.get("diag.NATIVE_OPENGL.title"), Strings.get("diag.NATIVE_OPENGL.advice"), lineMods);
         }
         if (text.contains("zipexception") || text.contains("invalid loc header")
                 || text.contains("error in opening zip file") || text.contains("corrupt") && text.contains("jar")) {
-            add("CORRUPT_ARCHIVE", "Повреждён JAR/ZIP", "Повторно загрузите повреждённый файл или выполните восстановление.", lineMods);
+            add("CORRUPT_ARCHIVE", Strings.get("diag.CORRUPT_ARCHIVE.title"), Strings.get("diag.CORRUPT_ARCHIVE.advice"), lineMods);
         }
         if (text.contains("authentication") && (text.contains("failed") || text.contains("error"))
                 || text.contains("invalid token") || text.contains("unauthorized")
                 || text.contains("unknownhostexception") || text.contains("connectexception")
                 || text.contains("sockettimeoutexception") || text.contains("sslhandshakeexception")) {
-            add("AUTH_NETWORK", "Ошибка авторизации или сети", "Проверьте подключение, время системы и повторите вход.", lineMods);
+            add("AUTH_NETWORK", Strings.get("diag.AUTH_NETWORK.title"), Strings.get("diag.AUTH_NETWORK.advice"), lineMods);
         }
     }
 
     private List<ModIdentity> matchMods(String text) {
         List<ModIdentity> matches = new ArrayList<>();
-        for (ModIdentity mod : mods) {
-            if (matches(mod, text)) {
-                matches.add(mod);
-                implicated.putIfAbsent(mod.fileName, mod);
+        for (ModMatcher matcher : matchers) {
+            if (matcher.matches(text)) {
+                matches.add(matcher.mod);
+                implicated.putIfAbsent(matcher.mod.fileName, matcher.mod);
             }
         }
         return matches;
     }
 
-    private boolean matches(ModIdentity mod, String text) {
-        if (mod.fileName != null && containsLiteral(text, mod.fileName.toLowerCase(Locale.ROOT))) return true;
-        if (mod.id != null && mod.id.length() >= 3 && containsToken(text, mod.id.toLowerCase(Locale.ROOT))) return true;
-        if (mod.name != null && mod.name.length() >= 4 && containsToken(text, mod.name.toLowerCase(Locale.ROOT))) return true;
-        if (mod.packageRoots != null) {
-            for (String root : mod.packageRoots) {
-                if (root != null && root.length() >= 5 && containsPackage(text, root.toLowerCase(Locale.ROOT))) return true;
+    private static final class ModMatcher {
+        final ModIdentity mod;
+        private final String fileNameLower;
+        private final List<Pattern> patterns = new ArrayList<>();
+
+        ModMatcher(ModIdentity mod) {
+            this.mod = mod;
+            this.fileNameLower = mod.fileName == null ? null : mod.fileName.toLowerCase(Locale.ROOT);
+            String id = mod.id != null && mod.id.length() >= 3 ? mod.id.toLowerCase(Locale.ROOT) : null;
+            if (id != null) {
+                patterns.add(Pattern.compile("(?<![a-z0-9_-])" + Pattern.quote(id) + "(?![a-z0-9_-])"));
+            }
+            String name = mod.name != null && mod.name.length() >= 4 ? mod.name.toLowerCase(Locale.ROOT) : null;
+            if (name != null) {
+                patterns.add(Pattern.compile("(?<![a-z0-9_-])" + Pattern.quote(name) + "(?![a-z0-9_-])"));
+            }
+            if (mod.packageRoots != null) {
+                for (String root : mod.packageRoots) {
+                    if (root == null || root.length() < 5) continue;
+                    String lower = root.toLowerCase(Locale.ROOT);
+                    patterns.add(Pattern.compile("(?<![a-z0-9_$])" + Pattern.quote(lower) + "(?:\\.|/)"));
+                }
             }
         }
-        return false;
-    }
 
-    private boolean containsLiteral(String text, String value) {
-        return !value.isBlank() && text.contains(value);
-    }
-
-    private boolean containsToken(String text, String value) {
-        if (value.isBlank()) return false;
-        return Pattern.compile("(?<![a-z0-9_-])" + Pattern.quote(value) + "(?![a-z0-9_-])").matcher(text).find();
-    }
-
-    private boolean containsPackage(String text, String value) {
-        return Pattern.compile("(?<![a-z0-9_$])" + Pattern.quote(value) + "(?:\\.|/)").matcher(text).find();
+        boolean matches(String text) {
+            if (fileNameLower != null && !fileNameLower.isBlank() && text.contains(fileNameLower)) {
+                return true;
+            }
+            for (Pattern pattern : patterns) {
+                if (pattern.matcher(text).find()) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     private void add(String code, String title, String advice, List<ModIdentity> mods) {

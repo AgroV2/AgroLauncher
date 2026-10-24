@@ -27,7 +27,8 @@ public final class DiagnosticFinding {
 
     @Override
     public String toString() {
-        String mods = implicatedMods.isEmpty() ? "" : " — Моды: " + String.join(", ", implicatedMods);
+        String mods = implicatedMods.isEmpty() ? "" : " — " + by.agro.launcher.i18n.Strings.get("diag.implicatedMods")
+                + ": " + String.join(", ", implicatedMods);
         return severity + ": " + title + mods
                 + (advice == null || advice.isBlank() ? "" : " — " + advice);
     }

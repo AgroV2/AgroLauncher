@@ -70,6 +70,20 @@ public final class SystemInfo {
 
         if (Platform.isWindows()) {
             try {
+                com.sun.jna.platform.win32.Kernel32 kernel = com.sun.jna.platform.win32.Kernel32.INSTANCE;
+                com.sun.jna.platform.win32.WinBase.MEMORYSTATUSEX status =
+                        new com.sun.jna.platform.win32.WinBase.MEMORYSTATUSEX();
+                if (kernel.GlobalMemoryStatusEx(status)) {
+                    long bytes = status.ullTotalPhys.longValue();
+                    if (bytes > 0) {
+                        return bytes / (1024 * 1024);
+                    }
+                }
+            } catch (Throwable ignored) {
+
+            }
+
+            try {
                 Process process = new ProcessBuilder("wmic", "computersystem", "get", "TotalPhysicalMemory")
                         .redirectErrorStream(true)
                         .start();

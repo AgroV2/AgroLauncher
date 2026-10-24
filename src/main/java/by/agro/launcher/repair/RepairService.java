@@ -281,10 +281,23 @@ public final class RepairService {
     private void recordManagedJre(InstallationManifest installation) throws IOException {
         if (!Files.isDirectory(paths.runtimesDir(), LinkOption.NOFOLLOW_LINKS)
                 || Files.isSymbolicLink(paths.runtimesDir())) return;
-        try (var files = Files.walk(paths.runtimesDir())) {
-            for (Path file : files.filter(p -> Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS)
-                    && !Files.isSymbolicLink(p)).toList()) {
-                replaceEntry(installation, integrity.observe(paths.root(), file, "managed-jre", null));
+        try (var files = Files.list(paths.runtimesDir())) {
+            for (Path runtime : files.filter(Files::isDirectory).toList()) {
+                String name = runtime.getFileName().toString();
+                if (!name.startsWith("jre-") || name.startsWith(".")) {
+                    continue;
+                }
+                Path marker = paths.runtimesDir().resolve("." + name + ".managed");
+                if (!Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) {
+                    Path temporary = SecureFiles.createSiblingTemp(marker, ".tmp");
+                    try {
+                        Files.writeString(temporary, name);
+                        SecureFiles.atomicReplace(temporary, marker);
+                    } finally {
+                        Files.deleteIfExists(temporary);
+                    }
+                }
+                replaceEntry(installation, integrity.observe(paths.root(), marker, "managed-jre", null));
             }
         }
     }

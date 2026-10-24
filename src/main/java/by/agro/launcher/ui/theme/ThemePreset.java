@@ -32,7 +32,6 @@ public enum ThemePreset {
     DEEP_FOREST_FLAME("DeepForest Flame", 0x0A1210, 0xFB923C,
             "theme.deepForest.desc"),
 
-
     QT_SYSTEM("theme.qtSystem", 0x202124, 0x3DAEE9,
             "theme.qtSystem.desc"),
 

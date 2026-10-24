@@ -123,18 +123,121 @@ public interface CredentialStore {
     }
 
     final class MacStore implements CredentialStore {
-        private IOException unavailable() {
-            return new IOException("macOS Keychain storage is disabled: no backend is configured that can write secrets without exposing them in process arguments");
+        private static final int ERR_SEC_DUPLICATE_ITEM = -25299;
+        private static final int ERR_SEC_ITEM_NOT_FOUND = -25300;
+
+        private interface SecurityFramework extends Library {
+            SecurityFramework INSTANCE = Native.load("Security", SecurityFramework.class);
+
+            int SecKeychainAddGenericPassword(Pointer keychain, int serviceNameLength, byte[] serviceName,
+                    int accountNameLength, byte[] accountName, int passwordLength, Pointer password,
+                    PointerByReference itemRef);
+
+            int SecKeychainFindGenericPassword(Pointer keychain, int serviceNameLength, byte[] serviceName,
+                    int accountNameLength, byte[] accountName, com.sun.jna.ptr.IntByReference passwordLength,
+                    PointerByReference passwordData, PointerByReference itemRef);
+
+            int SecKeychainItemFreeContent(Pointer attrBuf, Pointer dataBuf);
+
+            int SecKeychainItemDelete(Pointer itemRef);
+        }
+
+        private interface CoreFoundationFramework extends Library {
+            CoreFoundationFramework INSTANCE = Native.load("CoreFoundation", CoreFoundationFramework.class);
+
+            void CFRelease(Pointer ref);
+        }
+
+        private static byte[] utf8(String value) {
+            return value.getBytes(StandardCharsets.UTF_8);
+        }
+
+        private static int find(PointerByReference passwordData, com.sun.jna.ptr.IntByReference passwordLength,
+                                PointerByReference itemRef, String id) {
+            byte[] service = utf8(SERVICE);
+            byte[] account = utf8(id);
+            return SecurityFramework.INSTANCE.SecKeychainFindGenericPassword(
+                    null, service.length, service, account.length, account,
+                    passwordLength, passwordData, itemRef);
+        }
+
+        private static void deleteExisting(String id) throws Exception {
+            PointerByReference passwordData = new PointerByReference();
+            com.sun.jna.ptr.IntByReference passwordLength = new com.sun.jna.ptr.IntByReference();
+            PointerByReference itemRef = new PointerByReference();
+            int status = find(passwordData, passwordLength, itemRef, id);
+            if (status == ERR_SEC_ITEM_NOT_FOUND) {
+                return;
+            }
+            if (status != 0) {
+                throw new IOException("Keychain lookup failed with OSStatus " + status);
+            }
+            try {
+                if (passwordData.getValue() != null) {
+                    SecurityFramework.INSTANCE.SecKeychainItemFreeContent(null, passwordData.getValue());
+                }
+                int deleteStatus = SecurityFramework.INSTANCE.SecKeychainItemDelete(itemRef.getValue());
+                if (deleteStatus != 0) {
+                    throw new IOException("Keychain delete failed with OSStatus " + deleteStatus);
+                }
+            } finally {
+                CoreFoundationFramework.INSTANCE.CFRelease(itemRef.getValue());
+            }
         }
 
         @Override
-        public void put(String id, String secret) throws Exception { throw unavailable(); }
+        public void put(String id, String secret) throws Exception {
+            byte[] service = utf8(SERVICE);
+            byte[] account = utf8(id);
+            byte[] secretBytes = utf8(secret);
+            Memory password = new Memory(Math.max(1, secretBytes.length));
+            try {
+                if (secretBytes.length > 0) {
+                    password.write(0, secretBytes, 0, secretBytes.length);
+                }
+                int status = SecurityFramework.INSTANCE.SecKeychainAddGenericPassword(
+                        null, service.length, service, account.length, account,
+                        secretBytes.length, password, null);
+                if (status == ERR_SEC_DUPLICATE_ITEM) {
+                    deleteExisting(id);
+                    status = SecurityFramework.INSTANCE.SecKeychainAddGenericPassword(
+                            null, service.length, service, account.length, account,
+                            secretBytes.length, password, null);
+                }
+                if (status != 0) {
+                    throw new IOException("Keychain write failed with OSStatus " + status);
+                }
+            } finally {
+                password.clear();
+            }
+        }
 
         @Override
-        public String get(String id) throws Exception { throw unavailable(); }
+        public String get(String id) throws Exception {
+            PointerByReference passwordData = new PointerByReference();
+            com.sun.jna.ptr.IntByReference passwordLength = new com.sun.jna.ptr.IntByReference();
+            int status = find(passwordData, passwordLength, null, id);
+            if (status == ERR_SEC_ITEM_NOT_FOUND) {
+                return null;
+            }
+            if (status != 0) {
+                throw new IOException("Keychain read failed with OSStatus " + status);
+            }
+            try {
+                if (passwordData.getValue() == null || passwordLength.getValue() <= 0) {
+                    return "";
+                }
+                byte[] bytes = passwordData.getValue().getByteArray(0, passwordLength.getValue());
+                return new String(bytes, StandardCharsets.UTF_8);
+            } finally {
+                SecurityFramework.INSTANCE.SecKeychainItemFreeContent(null, passwordData.getValue());
+            }
+        }
 
         @Override
-        public void remove(String id) throws Exception { throw unavailable(); }
+        public void remove(String id) throws Exception {
+            deleteExisting(id);
+        }
     }
 
     final class LinuxStore implements CredentialStore {

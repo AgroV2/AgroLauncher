@@ -2,19 +2,18 @@ package by.agro.launcher.auth;
 
 import by.agro.launcher.core.Json;
 import by.agro.launcher.core.SafeNetwork;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import java.awt.Desktop;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.net.ProxySelector;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -29,7 +28,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-/** Configurable OAuth 2.0 authorization-code flow with PKCE and a loopback callback. */
+
 public final class ElyByOAuth {
     private static final SecureRandom RANDOM = new SecureRandom();
     private ElyByOAuth() { }
@@ -106,6 +105,13 @@ public final class ElyByOAuth {
         if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
             throw new IOException("OAuth " + name + " endpoint must use HTTPS");
         }
+        String host = uri.getHost();
+        boolean allowed = "ely.by".equalsIgnoreCase(host) || host.endsWith(".ely.by")
+                || "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host);
+        if (!allowed) {
+            throw new IOException("OAuth " + name + " endpoint must point to ely.by (got "
+                    + host + "); check settings.json for tampering");
+        }
     }
 
     private static URI authorizationUri(Config c, String redirectUri, String state, String challenge) {
@@ -148,62 +154,7 @@ public final class ElyByOAuth {
     }
 
     private static String skinUrl(JsonObject profile, String fallback) {
-        String direct = Json.string(profile, "skinUrl", Json.string(profile, "skin_url", ""));
-        if (!direct.isBlank()) return direct;
-        String fromSkin = textureUrl(profile.get("skin"));
-        if (!fromSkin.isBlank()) return fromSkin;
-        String fromTextures = textureUrl(profile.get("textures"));
-        if (!fromTextures.isBlank()) return fromTextures;
-        JsonArray properties = profile.has("properties") && profile.get("properties").isJsonArray()
-                ? profile.getAsJsonArray("properties") : null;
-        if (properties != null) {
-            for (JsonElement element : properties) {
-                if (!element.isJsonObject()) continue;
-                JsonObject property = element.getAsJsonObject();
-                if (!"textures".equals(Json.string(property, "name", ""))) continue;
-                String url = textureUrl(property.get("value"));
-                if (!url.isBlank()) return url;
-            }
-        }
-        return fallback == null ? "" : fallback;
-    }
-
-    private static String textureUrl(JsonElement value) {
-        if (value == null || value.isJsonNull()) return "";
-        try {
-            if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
-                String text = value.getAsString().trim();
-                if (text.isEmpty()) return "";
-                if (text.startsWith("http://") || text.startsWith("https://")) return text;
-                try { return textureUrl(JsonParser.parseString(text)); }
-                catch (RuntimeException ignored) {
-                    try {
-                        return textureUrl(JsonParser.parseString(new String(
-                                decodeBase64(text), StandardCharsets.UTF_8)));
-                    } catch (RuntimeException ignoredAgain) { return ""; }
-                }
-            }
-            if (!value.isJsonObject()) return "";
-            JsonObject object = value.getAsJsonObject();
-            String direct = Json.string(object, "url", "");
-            if (!direct.isBlank()) return direct;
-            JsonObject textures = Json.object(object, "textures");
-            if (textures != null) object = textures;
-            JsonObject skin = Json.object(object, "SKIN");
-            if (skin == null) skin = Json.object(object, "skin");
-            return skin == null ? "" : textureUrl(skin);
-        } catch (RuntimeException ignored) { return ""; }
-    }
-
-    private static byte[] decodeBase64(String value) {
-        String normalized = value.trim();
-        int remainder = normalized.length() % 4;
-        if (remainder != 0) normalized += "=".repeat(4 - remainder);
-        try {
-            return Base64.getUrlDecoder().decode(normalized);
-        } catch (IllegalArgumentException ignored) {
-            return Base64.getDecoder().decode(normalized);
-        }
+        return SkinUrls.skinUrl(profile, fallback);
     }
 
     private static void handleCallback(HttpExchange exchange,
@@ -278,7 +229,12 @@ public final class ElyByOAuth {
     }
     private static JsonObject send(HttpRequest request) throws IOException {
         try {
-            HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+            Proxy proxy = by.agro.launcher.core.Downloader.configuredProxy();
+            HttpClient.Builder builder = HttpClient.newBuilder();
+            if (proxy != Proxy.NO_PROXY && proxy.address() instanceof InetSocketAddress address) {
+                builder.proxy(ProxySelector.of(address));
+            }
+            HttpResponse<String> response = builder.build().send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300)
                 throw new IOException("OAuth request failed with HTTP " + response.statusCode());
             JsonObject json = Json.parseObject(response.body());

@@ -1,10 +1,7 @@
 package by.agro.launcher.auth;
 
 import by.agro.launcher.core.Json;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,7 +9,6 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.UUID;
 
 
@@ -22,7 +18,7 @@ public final class ElyByAuth {
     public static final String INJECTOR_ARGUMENT = AUTH_SERVER;
 
     private static final int TIMEOUT_MS = 20_000;
-    private static final String USER_AGENT = "AgroLauncher/1.0";
+    private static final String USER_AGENT = by.agro.launcher.core.LauncherVersion.USER_AGENT;
 
     private ElyByAuth() {
     }
@@ -107,62 +103,7 @@ public final class ElyByAuth {
 
 
     private static String skinUrl(JsonObject profile, String fallback) {
-        String direct = Json.string(profile, "skinUrl", Json.string(profile, "skin_url", ""));
-        if (!direct.isBlank()) return direct;
-        String fromSkin = textureUrl(profile.get("skin"));
-        if (!fromSkin.isBlank()) return fromSkin;
-        String fromTextures = textureUrl(profile.get("textures"));
-        if (!fromTextures.isBlank()) return fromTextures;
-        JsonArray properties = profile.has("properties") && profile.get("properties").isJsonArray()
-                ? profile.getAsJsonArray("properties") : null;
-        if (properties != null) {
-            for (JsonElement element : properties) {
-                if (!element.isJsonObject()) continue;
-                JsonObject property = element.getAsJsonObject();
-                if (!"textures".equals(Json.string(property, "name", ""))) continue;
-                String url = textureUrl(property.get("value"));
-                if (!url.isBlank()) return url;
-            }
-        }
-        return fallback == null ? "" : fallback;
-    }
-
-    private static String textureUrl(JsonElement value) {
-        if (value == null || value.isJsonNull()) return "";
-        try {
-            if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
-                String text = value.getAsString().trim();
-                if (text.isEmpty()) return "";
-                if (text.startsWith("http://") || text.startsWith("https://")) return text;
-                try { return textureUrl(JsonParser.parseString(text)); }
-                catch (RuntimeException ignored) {
-                    try {
-                        return textureUrl(JsonParser.parseString(new String(
-                                decodeBase64(text), StandardCharsets.UTF_8)));
-                    } catch (RuntimeException ignoredAgain) { return ""; }
-                }
-            }
-            if (!value.isJsonObject()) return "";
-            JsonObject object = value.getAsJsonObject();
-            String direct = Json.string(object, "url", "");
-            if (!direct.isBlank()) return direct;
-            JsonObject textures = Json.object(object, "textures");
-            if (textures != null) object = textures;
-            JsonObject skin = Json.object(object, "SKIN");
-            if (skin == null) skin = Json.object(object, "skin");
-            return skin == null ? "" : textureUrl(skin);
-        } catch (RuntimeException ignored) { return ""; }
-    }
-
-    private static byte[] decodeBase64(String value) {
-        String normalized = value.trim();
-        int remainder = normalized.length() % 4;
-        if (remainder != 0) normalized += "=".repeat(4 - remainder);
-        try {
-            return Base64.getUrlDecoder().decode(normalized);
-        } catch (IllegalArgumentException ignored) {
-            return Base64.getDecoder().decode(normalized);
-        }
+        return SkinUrls.skinUrl(profile, fallback);
     }
 
     public static boolean validate(Account account) {
@@ -239,13 +180,29 @@ public final class ElyByAuth {
         throw buildError(code, responseBody);
     }
 
+    private static final long MAX_AUTH_BODY_BYTES = 1024L * 1024;
+
     private static String readBody(HttpURLConnection conn, int code) throws IOException {
         InputStream stream = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
         if (stream == null) {
             return "";
         }
         try (InputStream in = stream) {
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            long total = 0;
+            int read;
+            while ((read = in.read(buffer)) >= 0) {
+                if (read == 0) {
+                    continue;
+                }
+                total += read;
+                if (total > MAX_AUTH_BODY_BYTES) {
+                    throw new IOException("Authentication response exceeds size limit");
+                }
+                out.write(buffer, 0, read);
+            }
+            return out.toString(StandardCharsets.UTF_8);
         }
     }
 

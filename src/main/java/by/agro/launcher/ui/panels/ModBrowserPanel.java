@@ -378,7 +378,7 @@ public final class ModBrowserPanel extends JPanel {
     public void refreshFilters() {
         updateSearchPlaceholder();
         updateFilterInfo();
-        if ("mod".equals(projectType)) {
+        if ("mod".equals(projectType) || "modpack".equals(projectType)) {
             reload();
         }
     }

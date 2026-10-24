@@ -25,7 +25,7 @@ import java.util.List;
 
 public final class Main {
 
-    public static final String VERSION = "1.3.0";
+    public static final String VERSION = by.agro.launcher.core.LauncherVersion.VERSION;
 
     public static void main(String[] args) {
         Path customDataDir = extractDataDir(args);
@@ -65,6 +65,8 @@ public final class Main {
             try {
                 ThemePreset preset = ThemePreset.fromId(settings.themePreset);
                 Color customAccent = PaletteFactory.parseHex(settings.customAccentColor);
+                AgroTheme.setInterfaceStyle(by.agro.launcher.ui.theme.InterfaceStyle.fromId(
+                        settings.interfaceStyle));
                 AgroTheme.install(preset, customAccent);
                 AgroTheme.setGradient(GradientPreset.fromId(settings.gradientPreset),
                         settings.customGradientColors);

@@ -100,7 +100,7 @@ public final class ModrinthClient {
     public SearchResult search(String query, String loader, String gameVersion, String category,
                                String projectType, Sort sort, int offset, int limit) throws IOException {
         String type = switch (projectType) {
-            case "resourcepack", "shader" -> projectType;
+            case "resourcepack", "shader", "modpack" -> projectType;
             default -> "mod";
         };
         JsonArray facets = new JsonArray();

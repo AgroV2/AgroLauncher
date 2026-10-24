@@ -6,6 +6,7 @@ import by.agro.launcher.i18n.Strings;
 import by.agro.launcher.ui.background.BackgroundManager;
 import by.agro.launcher.ui.components.ColorWheel;
 import by.agro.launcher.ui.components.GradientPreviewCard;
+import by.agro.launcher.ui.components.InterfaceStylePreviewCard;
 import by.agro.launcher.ui.components.ThemePreviewCard;
 import by.agro.launcher.ui.components.UiFactory;
 import by.agro.launcher.ui.theme.AgroTheme;
@@ -45,6 +46,7 @@ public final class AppearancePanel extends JPanel {
 
     private final List<ThemePreviewCard> themeCards = new ArrayList<>();
     private final List<GradientPreviewCard> gradientCards = new ArrayList<>();
+    private final List<InterfaceStylePreviewCard> styleCards = new ArrayList<>();
     private final java.util.Map<Language, JButton> languageButtons =
             new java.util.EnumMap<>(Language.class);
     private final JPanel customColorSection = UiFactory.transparentPanel();
@@ -93,6 +95,8 @@ public final class AppearancePanel extends JPanel {
         content.setBorder(BorderFactory.createEmptyBorder(4, 0, 10, 0));
 
         content.add(buildLanguageCard());
+        content.add(UiFactory.verticalGap(16));
+        content.add(buildInterfaceStyleCard());
         content.add(UiFactory.verticalGap(16));
         content.add(buildThemeCard());
         content.add(UiFactory.verticalGap(16));
@@ -151,6 +155,50 @@ public final class AppearancePanel extends JPanel {
         Strings.setLanguage(language);
         report(Strings.get("appearance.languageChanged", language.displayName()));
         notifyChanged();
+    }
+
+    private JComponent buildInterfaceStyleCard() {
+        JPanel card = UiFactory.titledCard(Strings.get("appearance.interfaceStyle"));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 178));
+
+        JPanel body = UiFactory.transparentPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+        JPanel grid = UiFactory.transparentPanel();
+        grid.setLayout(new GridLayout(0, 3, 12, 12));
+        grid.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        for (by.agro.launcher.ui.theme.InterfaceStyle style : by.agro.launcher.ui.theme.InterfaceStyle.values()) {
+            InterfaceStylePreviewCard previewCard =
+                    new InterfaceStylePreviewCard(style, this::selectInterfaceStyle);
+            styleCards.add(previewCard);
+            grid.add(previewCard);
+        }
+
+        body.add(grid);
+        updateStyleSelection();
+        card.add(body, BorderLayout.CENTER);
+        return card;
+    }
+
+    private void selectInterfaceStyle(by.agro.launcher.ui.theme.InterfaceStyle style) {
+        context.settings().interfaceStyle = style.name();
+        context.settings().materialYouStyle = style == by.agro.launcher.ui.theme.InterfaceStyle.MATERIAL_YOU;
+        context.settings().save();
+        AgroTheme.setInterfaceStyle(style);
+        updateStyleSelection();
+        notifyChanged();
+        report(Strings.get("appearance.styleChanged",
+                Strings.get("appearance.style." + style.id())));
+    }
+
+    private void updateStyleSelection() {
+        by.agro.launcher.ui.theme.InterfaceStyle active =
+                by.agro.launcher.ui.theme.InterfaceStyle.fromId(context.settings().interfaceStyle);
+        for (InterfaceStylePreviewCard card : styleCards) {
+            card.setSelected(card.style() == active);
+        }
     }
 
     private JComponent buildThemeCard() {
@@ -526,6 +574,7 @@ public final class AppearancePanel extends JPanel {
 
     private void loadValues() {
         var settings = context.settings();
+        updateStyleSelection();
         backgroundPathField.setText(settings.backgroundImagePath);
         blurCheckBox.setSelected(settings.backgroundBlur);
         blurRadiusSlider.setEnabled(settings.backgroundBlur);

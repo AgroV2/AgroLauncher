@@ -4,6 +4,7 @@ import by.agro.launcher.ui.theme.AgroTheme;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.Timer;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
@@ -19,12 +20,18 @@ public final class SideNavButton extends JButton {
 
     private boolean active;
     private boolean hovered;
+    private float selectionProgress;
+    private float selectionStart;
+    private long selectionAnimationStarted;
+    private final Timer selectionTimer;
 
     private final NavIcon navIcon;
 
     public SideNavButton(String text, NavIcon.Kind iconKind) {
         super(text);
         this.navIcon = new NavIcon(iconKind, 16, AgroTheme.textSecondary());
+        selectionTimer = new Timer(15, e -> updateSelectionAnimation());
+        selectionTimer.setCoalesce(true);
         setIcon(navIcon);
         setIconTextGap(12);
         setHorizontalAlignment(LEFT);
@@ -58,10 +65,27 @@ public final class SideNavButton extends JButton {
     }
 
     public void setActive(boolean active) {
+        if (this.active == active && selectionProgress == (active ? 1f : 0f)) return;
         this.active = active;
+        selectionStart = selectionProgress;
+        selectionAnimationStarted = System.nanoTime();
         setFont(active ? AgroTheme.boldFont(13) : AgroTheme.font(13));
         setForeground(active ? AgroTheme.textPrimary() : AgroTheme.textSecondary());
         navIcon.setColor(active ? AgroTheme.accent() : AgroTheme.textSecondary());
+        if (!selectionTimer.isRunning()) selectionTimer.start();
+        repaint();
+    }
+
+    private void updateSelectionAnimation() {
+        float elapsed = (System.nanoTime() - selectionAnimationStarted) / 1_000_000f;
+        float t = Math.min(1f, elapsed / 220f);
+        float eased = 1f - (float) Math.pow(1f - t, 3);
+        float target = active ? 1f : 0f;
+        selectionProgress = selectionStart + (target - selectionStart) * eased;
+        if (t >= 1f) {
+            selectionProgress = target;
+            selectionTimer.stop();
+        }
         repaint();
     }
 
@@ -83,20 +107,22 @@ public final class SideNavButton extends JButton {
         int width = getWidth();
         int height = getHeight();
 
-        Color background = null;
-        if (active) {
-            background = AgroTheme.bgElevated();
-        } else if (hovered) {
-            background = AgroTheme.bgPanel();
-        }
-        if (background != null) {
-            g2.setColor(background);
-            g2.fillRoundRect(6, 2, width - 12, height - 4, 9, 9);
+        float backgroundProgress = Math.max(selectionProgress, hovered ? 0.35f : 0f);
+        if (backgroundProgress > 0f) {
+            Color base = selectionProgress > 0f ? AgroTheme.bgElevated() : AgroTheme.bgPanel();
+            g2.setColor(new Color(base.getRed(), base.getGreen(), base.getBlue(),
+                    Math.round(255 * backgroundProgress)));
+            int arc = AgroTheme.navigationArc();
+            int inset = Math.round(3 * (1f - selectionProgress));
+            g2.fillRoundRect(6 + inset, 2, width - 12 - inset, height - 4, arc, arc);
         }
 
-        if (active) {
-            g2.setPaint(AgroTheme.gradientPaint(0, 8, INDICATOR_WIDTH + 2, height - 16));
-            g2.fillRoundRect(0, 8, INDICATOR_WIDTH + 2, height - 16, 3, 3);
+        if (selectionProgress > 0f) {
+            int indicatorHeight = Math.max(4, Math.round((height - 16) * selectionProgress));
+            int indicatorY = (height - indicatorHeight) / 2;
+            g2.setPaint(AgroTheme.gradientPaint(0, indicatorY,
+                    INDICATOR_WIDTH + 2, indicatorY + indicatorHeight));
+            g2.fillRoundRect(0, indicatorY, INDICATOR_WIDTH + 2, indicatorHeight, 3, 3);
         }
 
         g2.dispose();

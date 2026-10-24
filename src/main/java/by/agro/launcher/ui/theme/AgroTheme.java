@@ -22,9 +22,26 @@ import java.util.function.Consumer;
 
 public final class AgroTheme {
 
+    private static final int STANDARD_COMPONENT_ARC = 10;
+    private static final int MATERIAL_COMPONENT_ARC = 22;
+    private static final int LIQUID_COMPONENT_ARC = 24;
+    private static final int STANDARD_MENU_ARC = 10;
+    private static final int MATERIAL_MENU_ARC = 26;
+    private static final int LIQUID_MENU_ARC = 28;
+    private static final int STANDARD_CARD_ARC = 12;
+    private static final int MATERIAL_CARD_ARC = 30;
+    private static final int LIQUID_CARD_ARC = 34;
+    private static final int STANDARD_NAVIGATION_ARC = 9;
+    private static final int MATERIAL_NAVIGATION_ARC = 24;
+    private static final int LIQUID_NAVIGATION_ARC = 26;
+
     private static ThemePalette palette = ThemePreset.EMERALD_DARK.palette();
     private static ThemePreset activePreset = ThemePreset.EMERALD_DARK;
     private static Color[] gradientColors = new Color[0];
+    private static InterfaceStyle interfaceStyle = InterfaceStyle.STANDARD;
+    private static Color lastAccent;
+    private static Color lastAccentLight;
+    private static Color lastAccentDark;
 
     private static final List<Consumer<ThemePalette>> listeners = new ArrayList<>();
 
@@ -37,6 +54,53 @@ public final class AgroTheme {
 
     public static ThemePreset activePreset() {
         return activePreset;
+    }
+
+    public static InterfaceStyle interfaceStyle() {
+        return interfaceStyle;
+    }
+
+    public static boolean materialYouStyle() {
+        return interfaceStyle == InterfaceStyle.MATERIAL_YOU;
+    }
+
+    public static boolean isLiquidGlass() {
+        return interfaceStyle == InterfaceStyle.LIQUID_GLASS;
+    }
+
+    public static int menuArc() {
+        return switch (interfaceStyle) {
+            case MATERIAL_YOU -> MATERIAL_MENU_ARC;
+            case LIQUID_GLASS -> LIQUID_MENU_ARC;
+            default -> STANDARD_MENU_ARC;
+        };
+    }
+
+    public static int cardArc() {
+        return switch (interfaceStyle) {
+            case MATERIAL_YOU -> MATERIAL_CARD_ARC;
+            case LIQUID_GLASS -> LIQUID_CARD_ARC;
+            default -> STANDARD_CARD_ARC;
+        };
+    }
+
+    public static int navigationArc() {
+        return switch (interfaceStyle) {
+            case MATERIAL_YOU -> MATERIAL_NAVIGATION_ARC;
+            case LIQUID_GLASS -> LIQUID_NAVIGATION_ARC;
+            default -> STANDARD_NAVIGATION_ARC;
+        };
+    }
+
+    public static void setInterfaceStyle(InterfaceStyle style) {
+        interfaceStyle = style != null ? style : InterfaceStyle.STANDARD;
+        applyDefaults();
+        for (Window window : Window.getWindows()) {
+            SwingUtilities.updateComponentTreeUI(window);
+            window.revalidate();
+            window.repaint();
+        }
+        notifyListeners();
     }
 
     public static Color[] gradientColors() {
@@ -69,11 +133,28 @@ public final class AgroTheme {
     public static void setGradient(GradientPreset preset, String customColors) {
         gradientColors = (preset == null ? GradientPreset.NONE : preset).colors(customColors);
         applyDefaults();
+        migrateAccentTrio();
         for (Window window : Window.getWindows()) {
             SwingUtilities.updateComponentTreeUI(window);
             window.repaint();
         }
         notifyListeners();
+    }
+
+    private static void migrateAccentTrio() {
+        Color newAccent = accent();
+        Color newLight = accentLight();
+        Color newDark = accentDark();
+        if (lastAccent != null || lastAccentLight != null || lastAccentDark != null) {
+            Color[] from = {lastAccent, lastAccentLight, lastAccentDark};
+            Color[] to = {newAccent, newLight, newDark};
+            for (Window window : Window.getWindows()) {
+                migrateColors(window, from, to);
+            }
+        }
+        lastAccent = newAccent;
+        lastAccentLight = newLight;
+        lastAccentDark = newDark;
     }
 
     public static java.awt.Paint gradientPaint(int width, int height) {
@@ -196,6 +277,9 @@ public final class AgroTheme {
 
         FlatDarkLaf.setup();
         applyDefaults();
+        lastAccent = accent();
+        lastAccentLight = accentLight();
+        lastAccentDark = accentDark();
     }
 
     public static void apply(ThemePreset preset, Color customColor) {
@@ -212,6 +296,7 @@ public final class AgroTheme {
         for (Window window : Window.getWindows()) {
             migratePaletteColors(window, previous, palette);
         }
+        migrateAccentTrio();
         FlatLaf.updateUI();
         notifyListeners();
 
@@ -229,12 +314,19 @@ public final class AgroTheme {
         if (component == null || previous == null || current == null) {
             return;
         }
+        migrateColors(component, paletteColors(previous), paletteColors(current));
+    }
 
-        Color foreground = replacement(component.getForeground(), previous, current);
+    private static void migrateColors(Component component, Color[] from, Color[] to) {
+        if (component == null || from == null || to == null || from.length != to.length) {
+            return;
+        }
+
+        Color foreground = replacement(component.getForeground(), from, to);
         if (foreground != null) {
             component.setForeground(foreground);
         }
-        Color background = replacement(component.getBackground(), previous, current);
+        Color background = replacement(component.getBackground(), from, to);
         if (background != null) {
             component.setBackground(background);
         }
@@ -242,12 +334,12 @@ public final class AgroTheme {
         if (component instanceof JComponent swingComponent) {
             Border border = swingComponent.getBorder();
             if (border != null && !(border instanceof UIResource)) {
-                swingComponent.setBorder(recolorBorder(border, previous, current));
+                swingComponent.setBorder(recolorBorder(border, from, to));
             }
         }
         if (component instanceof Container container) {
             for (Component child : container.getComponents()) {
-                migratePaletteColors(child, previous, current);
+                migrateColors(child, from, to);
             }
         }
     }
@@ -256,11 +348,16 @@ public final class AgroTheme {
         if (color == null || color instanceof ColorUIResource) {
             return null;
         }
-        Color[] oldColors = paletteColors(previous);
-        Color[] newColors = paletteColors(current);
-        for (int i = 0; i < oldColors.length; i++) {
-            if (color.equals(oldColors[i])) {
-                return newColors[i];
+        return replacement(color, paletteColors(previous), paletteColors(current));
+    }
+
+    private static Color replacement(Color color, Color[] from, Color[] to) {
+        if (color == null || color instanceof ColorUIResource) {
+            return null;
+        }
+        for (int i = 0; i < from.length; i++) {
+            if (from[i] != null && color.equals(from[i])) {
+                return to[i];
             }
         }
         return null;
@@ -273,16 +370,15 @@ public final class AgroTheme {
                 p.border, p.borderLight, p.error, p.warning, p.info};
     }
 
-    private static Border recolorBorder(Border border, ThemePalette previous,
-                                        ThemePalette current) {
+    private static Border recolorBorder(Border border, Color[] from, Color[] to) {
         if (border instanceof javax.swing.border.LineBorder line) {
-            Color color = replacement(line.getLineColor(), previous, current);
+            Color color = replacement(line.getLineColor(), from, to);
             return color != null
                     ? javax.swing.BorderFactory.createLineBorder(color,
                     line.getThickness(), line.getRoundedCorners()) : border;
         }
         if (border instanceof javax.swing.border.MatteBorder matte) {
-            Color color = replacement(matte.getMatteColor(), previous, current);
+            Color color = replacement(matte.getMatteColor(), from, to);
             return color != null
                     ? javax.swing.BorderFactory.createMatteBorder(
                     matte.getBorderInsets().top, matte.getBorderInsets().left,
@@ -290,8 +386,8 @@ public final class AgroTheme {
                     : border;
         }
         if (border instanceof javax.swing.border.CompoundBorder compound) {
-            Border outside = recolorBorder(compound.getOutsideBorder(), previous, current);
-            Border inside = recolorBorder(compound.getInsideBorder(), previous, current);
+            Border outside = recolorBorder(compound.getOutsideBorder(), from, to);
+            Border inside = recolorBorder(compound.getInsideBorder(), from, to);
             return outside != compound.getOutsideBorder() || inside != compound.getInsideBorder()
                     ? javax.swing.BorderFactory.createCompoundBorder(outside, inside) : border;
         }
@@ -330,11 +426,26 @@ public final class AgroTheme {
     }
 
     private static void applyDefaults() {
-        UIManager.put("Component.arc", 10);
-        UIManager.put("Button.arc", 10);
-        UIManager.put("TextComponent.arc", 8);
-        UIManager.put("ProgressBar.arc", 8);
-        UIManager.put("CheckBox.arc", 5);
+        boolean roundedStyle = interfaceStyle != InterfaceStyle.STANDARD;
+        int componentArc = switch (interfaceStyle) {
+            case MATERIAL_YOU -> MATERIAL_COMPONENT_ARC;
+            case LIQUID_GLASS -> LIQUID_COMPONENT_ARC;
+            default -> STANDARD_COMPONENT_ARC;
+        };
+        int menuArc = menuArc();
+        UIManager.put("Component.arc", componentArc);
+        UIManager.put("Button.arc", roundedStyle ? 999 : STANDARD_COMPONENT_ARC);
+        UIManager.put("TextComponent.arc", roundedStyle ? 18 : 8);
+        UIManager.put("ProgressBar.arc", roundedStyle ? 999 : 8);
+        UIManager.put("CheckBox.arc", roundedStyle ? 8 : 5);
+        UIManager.put("TabbedPane.tabArc", roundedStyle ? 18 : STANDARD_COMPONENT_ARC);
+        UIManager.put("Menu.arc", menuArc);
+        UIManager.put("MenuItem.arc", menuArc);
+        UIManager.put("PopupMenu.arc", menuArc);
+        UIManager.put("ComboBox.arc", menuArc);
+        UIManager.put("ComboBox.popupArc", menuArc);
+        UIManager.put("TabbedPane.selectedBackground", roundedStyle ? accentDeep() : palette.bgElevated);
+        UIManager.put("Component.focusWidth", roundedStyle ? 2 : 1);
 
         applyColors();
         applyFonts();

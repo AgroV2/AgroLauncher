@@ -155,7 +155,7 @@ public final class JavaManager {
         String url = String.format(ADOPTIUM_ASSETS, majorVersion,
                 Platform.adoptiumOs(), Platform.adoptiumArch());
 
-        listener.onProgress("Java " + majorVersion, 0, 3, "поиск сборки");
+        listener.onProgress("Java " + majorVersion, 0, 3, by.agro.launcher.i18n.Strings.get("jre.stageSearch"));
         String body = new MetadataCache(paths.metadataCacheDir(), downloader, settings.metadataCacheEnabled)
                 .get(url, Duration.ofMinutes(settings.metadataCacheTtlMinutes));
         JsonArray assets = Json.parse(body).getAsJsonArray();
@@ -180,14 +180,14 @@ public final class JavaManager {
         }
 
         Path archive = paths.cacheDir().resolve("runtimes").resolve(name);
-        listener.onProgress("Java " + majorVersion, 1, 3, "загрузка " + name);
+        listener.onProgress("Java " + majorVersion, 1, 3, by.agro.launcher.i18n.Strings.get("jre.stageDownload", name));
         Files.createDirectories(archive.getParent());
         downloader.downloadVerified(link, archive, "SHA-256", checksum, 512L * 1024 * 1024);
 
         Path target = paths.runtimeDir(majorVersion);
         Path staging = paths.runtimesDir().resolve(".jre-" + majorVersion + "-" + java.util.UUID.randomUUID() + ".tmp");
         Path backup = paths.runtimesDir().resolve(".jre-" + majorVersion + ".previous");
-        listener.onProgress("Java " + majorVersion, 2, 3, "распаковка");
+        listener.onProgress("Java " + majorVersion, 2, 3, by.agro.launcher.i18n.Strings.get("jre.stageExtract"));
         Files.createDirectories(staging);
         try {
             if (name.endsWith(".zip")) ArchiveExtractor.unzip(archive, staging);
@@ -214,8 +214,8 @@ public final class JavaManager {
             deleteRecursively(staging);
         }
         Path executable = findJavaExecutable(target);
-        listener.onProgress("Java " + majorVersion, 3, 3, "готово");
-        listener.onMessage("Java " + majorVersion + " установлена: " + executable);
+        listener.onProgress("Java " + majorVersion, 3, 3, by.agro.launcher.i18n.Strings.get("jre.stageDone"));
+        listener.onMessage(by.agro.launcher.i18n.Strings.get("jre.installed", majorVersion, executable));
         return executable;
     }
     public JavaInstallation detectSystemJava() {
@@ -234,7 +234,7 @@ public final class JavaManager {
             if (Files.isExecutable(candidate)) {
                 int major = JavaDetector.queryMajorVersion(candidate);
                 if (major > 0) {
-                    return new JavaInstallation(candidate, major, "система");
+                    return new JavaInstallation(candidate, major, by.agro.launcher.i18n.Strings.get("jre.sourceSystem"));
                 }
             }
         }
@@ -257,7 +257,7 @@ public final class JavaManager {
         for (int version : JavaRequirement.supportedVersions()) {
             Path managed = managedJavaPath(version);
             if (managed != null) {
-                result.add(new JavaInstallation(managed, version, "встроенная"));
+                result.add(new JavaInstallation(managed, version, by.agro.launcher.i18n.Strings.get("jre.sourceManaged")));
             }
         }
         return result;

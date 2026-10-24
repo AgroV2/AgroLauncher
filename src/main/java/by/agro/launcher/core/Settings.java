@@ -25,6 +25,14 @@ public final class Settings {
     public int metadataCacheTtlMinutes = 360;
     public int metadataSearchCacheTtlMinutes = 10;
 
+    public String proxyMode = "NONE";
+    public String proxyHost = "";
+    public int proxyPort = 8080;
+
+    public boolean updateAutoCheck = true;
+
+    public String quickPlayServer = "";
+
     
     public String selectedVersion = "";
 
@@ -57,13 +65,16 @@ public final class Settings {
     
     public String themePreset = "EMERALD_DARK";
 
+
+    public boolean materialYouStyle = false;
+
+    public String interfaceStyle = "";
+
     
     public String customAccentColor = "#10B981";
 
-    /** Gradient mode: NONE or CUSTOM. */
     public String gradientPreset = "NONE";
 
-    /** Comma-separated custom gradient colors, limited to ten valid hex colors. */
     public String customGradientColors = "#10B981,#38BDF8";
 
     
@@ -140,6 +151,7 @@ public final class Settings {
         try {
             normalize();
             Json.write(LauncherPaths.get().settingsFile(), this);
+            SecureFiles.setOwnerOnly(LauncherPaths.get().settingsFile());
         } catch (IOException e) {
             System.err.println("Не удалось сохранить настройки: " + e.getMessage());
         }
@@ -173,6 +185,16 @@ public final class Settings {
 
         
         if (themePreset == null || themePreset.isBlank()) themePreset = "EMERALD_DARK";
+        if (interfaceStyle == null || interfaceStyle.isBlank()) {
+            interfaceStyle = materialYouStyle ? "MATERIAL_YOU" : "STANDARD";
+        }
+        try {
+            interfaceStyle = by.agro.launcher.ui.theme.InterfaceStyle.valueOf(
+                    interfaceStyle.toUpperCase(java.util.Locale.ROOT)).name();
+        } catch (IllegalArgumentException e) {
+            interfaceStyle = "STANDARD";
+        }
+        materialYouStyle = "MATERIAL_YOU".equals(interfaceStyle);
         if (customAccentColor == null || customAccentColor.isBlank()) customAccentColor = "#10B981";
         if (gradientPreset == null || gradientPreset.isBlank()) gradientPreset = "NONE";
         gradientPreset = gradientPreset.toUpperCase(java.util.Locale.ROOT);
@@ -202,6 +224,12 @@ public final class Settings {
         panelOpacityPercent = clamp(panelOpacityPercent, 40, 100);
         windowOpacityPercent = clamp(windowOpacityPercent, 20, 100);
         if (modSearchSort == null || modSearchSort.isBlank()) modSearchSort = "downloads";
+        if (proxyMode == null || proxyMode.isBlank()) proxyMode = "NONE";
+        proxyMode = proxyMode.toUpperCase(java.util.Locale.ROOT);
+        if (!proxyMode.equals("HTTP") && !proxyMode.equals("SOCKS")) proxyMode = "NONE";
+        if (proxyHost == null) proxyHost = "";
+        if (proxyPort <= 0 || proxyPort > 65535) proxyPort = 8080;
+        if (quickPlayServer == null) quickPlayServer = "";
         if (elyOAuthCallbackPort < 0 || elyOAuthCallbackPort > 65535) elyOAuthCallbackPort = 0;
         if (elyOAuthTimeoutSeconds <= 0) elyOAuthTimeoutSeconds = 180;
         if (elySkinUrlTemplate == null) elySkinUrlTemplate = "";

@@ -16,6 +16,18 @@ public enum GradientPreset {
             0xEF4444, 0xF59E0B, 0x22C55E, 0x3B82F6, 0xA855F7),
     MONOCHROME("appearance.gradientMonochrome", "gradient.monochrome.desc",
             0x374151, 0x9CA3AF, 0xF3F4F6),
+    AGED_WINE("appearance.gradientAgedWine", "gradient.agedWine.desc",
+            0x773344, 0xC2A878, 0x191716),
+    MOJITO("appearance.gradientMojito", "gradient.mojito.desc",
+            0xB8C98A, 0x365447, 0x7650A8),
+    NEON("appearance.gradientNeon", "gradient.neon.desc",
+            0x00F5D4, 0xFE019A, 0x171717),
+    STYLISH_ORANGE("appearance.gradientStylishOrange", "gradient.stylishOrange.desc",
+            0xF5F0DC, 0xF0442E, 0x171717),
+    ANCIENT("appearance.gradientAncient", "gradient.ancient.desc",
+            0xF2C14E, 0x28666E, 0xF4EDE0),
+    MATERIAL_YOU("appearance.gradientMaterialYou", "gradient.materialYou.desc",
+            0xD8B4FE, 0xE9D5FF),
     CUSTOM("appearance.gradientCustom", "gradient.custom.desc");
 
     private final String nameKey;

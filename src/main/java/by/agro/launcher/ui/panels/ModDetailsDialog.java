@@ -31,6 +31,8 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Window;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -308,7 +310,8 @@ public final class ModDetailsDialog extends JDialog {
             dependencyLabel.setText(" ");
         }
 
-        boolean alreadyInstalled = installer.isInstalled(version, projectType);
+        boolean alreadyInstalled = !"modpack".equals(projectType)
+                && installer.isInstalled(version, projectType);
         installButton.setText(alreadyInstalled ? Strings.get("modDialog.alreadyInstalled") : Strings.get(typeKey("install")));
         installButton.setEnabled(!alreadyInstalled);
     }
@@ -336,6 +339,11 @@ public final class ModDetailsDialog extends JDialog {
             }
         };
 
+        if ("modpack".equals(projectType)) {
+            installModpack(version, listener);
+            return;
+        }
+
         boolean dependencies = withDependencies.isSelected();
 
         new SwingWorker<ModInstaller.Result, Void>() {
@@ -359,6 +367,52 @@ public final class ModDetailsDialog extends JDialog {
                         installButton.setEnabled(true);
                         progressLabel.setText(result.summary() + " — " + result.failed.get(0));
                     }
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    progressLabel.setText(Strings.get("common.error") + ": " + cause.getMessage());
+                    installButton.setEnabled(true);
+                }
+            }
+        }.execute();
+    }
+
+    private void installModpack(ModrinthVersion version, ProgressListener listener) {
+        ModrinthVersion.File file = version.primaryFile();
+        if (file == null || file.url == null) {
+            progressLabel.setText(Strings.get("install.noFile", version.versionNumber));
+            installButton.setEnabled(true);
+            return;
+        }
+        new SwingWorker<by.agro.launcher.modrinth.MrpackInstaller.Installed, Void>() {
+            @Override
+            protected by.agro.launcher.modrinth.MrpackInstaller.Installed doInBackground() throws Exception {
+                Path archive = context.paths().cacheDir().resolve("modpacks").resolve(file.filename);
+                Files.createDirectories(archive.getParent());
+                context.downloader().download(file.url, archive, file.sha1, file.size);
+                by.agro.launcher.modrinth.MrpackInstaller mrpack =
+                        new by.agro.launcher.modrinth.MrpackInstaller(context.paths(), context.downloader());
+                return mrpack.install(archive, listener);
+            }
+
+            @Override
+            protected void done() {
+                progressBar.setVisible(false);
+                try {
+                    by.agro.launcher.modrinth.MrpackInstaller.Installed installed = get();
+                    context.settings().selectedVersion = installed.minecraftVersion;
+                    context.settings().selectedLoader = installed.loader.id();
+                    context.settings().selectedLoaderVersion =
+                            installed.loaderVersion == null ? "" : installed.loaderVersion;
+                    context.settings().selectedModBuildId = "";
+                    context.settings().save();
+                    String summary = Strings.get("modpack.installed",
+                            installed.name, installed.minecraftVersion)
+                            + " · " + installed.gameDir;
+                    progressLabel.setText(summary);
+                    if (onInstalled != null) {
+                        onInstalled.accept(project.title + ": " + summary);
+                    }
+                    installButton.setText(Strings.get(typeKey("installed")));
                 } catch (Exception e) {
                     Throwable cause = e.getCause() != null ? e.getCause() : e;
                     progressLabel.setText(Strings.get("common.error") + ": " + cause.getMessage());

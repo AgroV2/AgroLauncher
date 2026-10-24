@@ -17,6 +17,7 @@ public final class NavIcon implements Icon {
     public enum Kind {
         PLAY,
         VERSIONS,
+        INSTANCES,
         ACCOUNTS,
         MODS,
         SETTINGS,
@@ -65,6 +66,9 @@ public final class NavIcon implements Icon {
             case VERSIONS:
                 paintVersions(g2);
                 break;
+            case INSTANCES:
+                paintInstances(g2);
+                break;
             case ACCOUNTS:
                 paintAccount(g2);
                 break;
@@ -107,6 +111,18 @@ public final class NavIcon implements Icon {
                 g2.draw(layer);
             }
         }
+    }
+
+    private void paintInstances(Graphics2D g2) {
+        float cell = size * 0.34f;
+        float gap = size * 0.14f;
+        float left = (size - cell * 2 - gap) / 2f;
+        float top = (size - cell * 2 - gap) / 2f;
+        float arc = cell * 0.35f;
+        g2.fill(new RoundRectangle2D.Float(left, top, cell, cell, arc, arc));
+        g2.draw(new RoundRectangle2D.Float(left + cell + gap, top, cell, cell, arc, arc));
+        g2.draw(new RoundRectangle2D.Float(left, top + cell + gap, cell, cell, arc, arc));
+        g2.fill(new RoundRectangle2D.Float(left + cell + gap, top + cell + gap, cell, cell, arc, arc));
     }
 
     private void paintAccount(Graphics2D g2) {

@@ -61,7 +61,7 @@ public final class AccentButton extends JButton {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        int arc = 11;
+        int arc = AgroTheme.materialYouStyle() ? Math.max(24, getHeight()) : 11;
         Color background;
         if (!isEnabled()) {
             background = AgroTheme.bgHover();

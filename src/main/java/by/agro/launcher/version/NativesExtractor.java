@@ -18,6 +18,9 @@ import java.util.zip.ZipFile;
 
 public final class NativesExtractor {
 
+    private static final int MAX_EXTRACTED_ENTRIES = 20_000;
+    private static final long MAX_EXTRACTED_BYTES = 2L * 1024 * 1024 * 1024;
+
     private final LauncherPaths paths;
 
     public NativesExtractor(LauncherPaths paths) {
@@ -40,7 +43,7 @@ public final class NativesExtractor {
             index++;
             Path jar = paths.librariesDir().resolve(library.relativePath());
             if (!Files.exists(jar)) {
-                listener.onMessage("Нативная библиотека не найдена, пропуск: " + jar.getFileName());
+                listener.onMessage(Strings.get("natives.missingSkip", jar.getFileName()));
                 continue;
             }
             listener.onProgress(Strings.get("progress.natives"), index, natives.size(),
@@ -53,10 +56,16 @@ public final class NativesExtractor {
     private void extractJar(Path jar, Path targetDir, List<String> excludes) throws IOException {
         try (ZipFile zip = new ZipFile(jar.toFile())) {
             var entries = zip.entries();
+            int entryCount = 0;
+            long totalBytes = 0;
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 if (entry.isDirectory()) {
                     continue;
+                }
+                entryCount++;
+                if (entryCount > MAX_EXTRACTED_ENTRIES || totalBytes > MAX_EXTRACTED_BYTES) {
+                    throw new IOException("Native archive exceeds the extraction limits");
                 }
                 String name = entry.getName();
                 if (isExcluded(name, excludes)) {
@@ -87,7 +96,9 @@ public final class NativesExtractor {
                 Path temporary = SecureFiles.createSiblingTemp(target, ".native");
                 try {
                     try (InputStream in = zip.getInputStream(entry)) {
-                        Files.copy(in, temporary, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        long copied = Files.copy(in, temporary,
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        totalBytes += copied;
                     }
                     SecureFiles.rejectSymlinkParents(normalizedDir);
                     SecureFiles.rejectSymbolicLink(target, "Native destination");

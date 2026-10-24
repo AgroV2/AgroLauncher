@@ -47,9 +47,10 @@ public final class LauncherContext {
         this.paths.ensureDirectories();
         this.settings = settings != null ? settings : Settings.load();
         this.downloader = new Downloader(this.settings.downloadParallelism);
+        Downloader.configureProxy(this.settings.proxyMode, this.settings.proxyHost, this.settings.proxyPort);
         this.accounts = new AccountStorage(paths);
         this.javaManager = new JavaManager(paths, downloader, settings);
-        this.gameLauncher = new GameLauncher(paths, downloader, settings, javaManager);
+        this.gameLauncher = new GameLauncher(paths, downloader, settings, javaManager, accounts);
         this.versionResolver = gameLauncher.resolver();
         this.repairService = new RepairService(paths, downloader);
 

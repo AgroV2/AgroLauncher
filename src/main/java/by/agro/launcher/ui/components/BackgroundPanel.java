@@ -14,13 +14,32 @@ import java.awt.image.BufferedImage;
 
 public final class BackgroundPanel extends JPanel {
 
+    private static final long MIN_FRAME_INTERVAL_NANOS = 50_000_000L;
+
     private final BackgroundManager backgroundManager;
     private final Settings settings;
+    private long lastFramePaintNanos;
+    private final javax.swing.Timer frameDebounce = new javax.swing.Timer(60, e -> repaint());
+
+    private final java.awt.image.ImageObserver frameObserver = (img, flags, x, y, width, height) -> {
+        if ((flags & (java.awt.image.ImageObserver.FRAMEBITS
+                | java.awt.image.ImageObserver.ALLBITS)) != 0) {
+            long now = System.nanoTime();
+            if (now - lastFramePaintNanos >= MIN_FRAME_INTERVAL_NANOS) {
+                lastFramePaintNanos = now;
+                repaint();
+            } else if (!frameDebounce.isRunning()) {
+                frameDebounce.restart();
+            }
+        }
+        return true;
+    };
 
     public BackgroundPanel(LayoutManager layout, BackgroundManager backgroundManager, Settings settings) {
         super(layout);
         this.backgroundManager = backgroundManager;
         this.settings = settings;
+        frameDebounce.setRepeats(false);
         setOpaque(false);
     }
 
@@ -40,6 +59,7 @@ public final class BackgroundPanel extends JPanel {
 
         ImageIcon animated = backgroundManager.animatedIcon(settings);
         if (animated != null) {
+            lastFramePaintNanos = System.nanoTime();
             drawCovering(g2, animated, width, height);
         } else {
             BufferedImage rendered = backgroundManager.render(width, height, settings);
@@ -71,7 +91,7 @@ public final class BackgroundPanel extends JPanel {
         int x = (width - scaledWidth) / 2;
         int y = (height - scaledHeight) / 2;
 
-        g2.drawImage(icon.getImage(), x, y, scaledWidth, scaledHeight, this);
+        g2.drawImage(icon.getImage(), x, y, scaledWidth, scaledHeight, frameObserver);
     }
 
     public static Color panelBackground(Settings settings, boolean hasBackground) {

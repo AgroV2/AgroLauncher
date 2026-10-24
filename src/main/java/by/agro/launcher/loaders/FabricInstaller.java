@@ -88,8 +88,8 @@ public class FabricInstaller implements LoaderInstaller {
             resolvedLoader = pickRecommended(minecraftVersion);
         }
 
-        listener.onMessage(type().displayName() + " " + resolvedLoader + " для Minecraft " + minecraftVersion);
-        listener.onProgress("Установка " + type().displayName(), 0, 2, "получение профиля");
+        listener.onMessage(by.agro.launcher.i18n.Strings.get("loader.installSummary", type().displayName(), resolvedLoader, minecraftVersion));
+        listener.onProgress(by.agro.launcher.i18n.Strings.get("loader.stageInstalling", type().displayName()), 0, 2, by.agro.launcher.i18n.Strings.get("loader.stageProfile"));
 
         String profileUrl = metaBase() + "/versions/loader/"
                 + encode(minecraftVersion) + "/" + encode(resolvedLoader) + "/profile/json";
@@ -109,8 +109,8 @@ public class FabricInstaller implements LoaderInstaller {
         Files.createDirectories(target.getParent());
         Json.write(target, profile);
 
-        listener.onProgress("Установка " + type().displayName(), 2, 2, versionId);
-        listener.onMessage("Профиль сохранён: " + versionId);
+        listener.onProgress(by.agro.launcher.i18n.Strings.get("loader.stageInstalling", type().displayName()), 2, 2, versionId);
+        listener.onMessage(by.agro.launcher.i18n.Strings.get("loader.profileSaved", versionId));
         return versionId;
     }
 

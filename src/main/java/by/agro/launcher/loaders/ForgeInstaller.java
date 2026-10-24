@@ -8,6 +8,7 @@ import by.agro.launcher.core.MetadataCache;
 import by.agro.launcher.core.ProgressListener;
 import by.agro.launcher.core.SecureFiles;
 import by.agro.launcher.core.Settings;
+import by.agro.launcher.i18n.Strings;
 import by.agro.launcher.jvm.JavaManager;
 import by.agro.launcher.version.RemoteVersion;
 import by.agro.launcher.version.VersionManifest;
@@ -127,18 +128,19 @@ public class ForgeInstaller implements LoaderInstaller {
         if (!force) {
             String installed = validatedInstalledProfile(minecraftVersion, forgeVersion, fullVersion, listener);
             if (installed != null) {
-                listener.onMessage("Установка не требуется: проверен профиль " + installed);
+                listener.onMessage(Strings.get("forge.installNotRequired", installed));
                 return installed;
             }
-            listener.onMessage("Установка требуется: marker отсутствует или профиль неполон");
+            listener.onMessage(Strings.get("forge.installRequired"));
         } else {
-            listener.onMessage("Принудительная переустановка запрошена Repair");
+            listener.onMessage(Strings.get("forge.forceReinstall"));
         }
 
         Path installer = paths.installersDir()
                 .resolve(type().id() + "-" + fullVersion + "-installer.jar");
         String installerUrl = installerUrl(fullVersion);
-        listener.onProgress("Установка " + type().displayName(), 0, 3, "загрузка установщика");
+        listener.onProgress(Strings.get("forge.stageTitle", type().displayName()), 0, 3,
+                Strings.get("forge.stageDownloadInstaller"));
         String installerSha1 = fetchInstallerSha1(installerUrl);
         downloader.downloadVerified(installerUrl, installer, "SHA-1", installerSha1,
                 256L * 1024 * 1024);
@@ -149,18 +151,20 @@ public class ForgeInstaller implements LoaderInstaller {
 
         ensureVanillaClient(minecraftVersion, listener);
 
-        listener.onProgress("Установка " + type().displayName(), 1, 3, "запуск установщика");
+        listener.onProgress(Strings.get("forge.stageTitle", type().displayName()), 1, 3,
+                Strings.get("forge.stageRunInstaller"));
         String javaExe = javaManager.resolveJavaForInstaller();
         try {
             runInstaller(javaExe, installer, gameDir, listener);
         } catch (ProcessorMismatchException e) {
-            listener.onMessage("Промежуточные файлы не совпали с эталоном — очищаем и повторяем");
+            listener.onMessage(Strings.get("forge.processorRetry"));
             cleanupPatchedArtifacts(minecraftVersion, listener);
             ensureVanillaClient(minecraftVersion, listener);
             runInstaller(javaExe, installer, gameDir, listener);
         }
 
-        listener.onProgress("Установка " + type().displayName(), 2, 3, "поиск профиля");
+        listener.onProgress(Strings.get("forge.stageTitle", type().displayName()), 2, 3,
+                Strings.get("forge.stageFindProfile"));
         String versionId = findInstalledProfile(minecraftVersion, forgeVersion);
         if (versionId == null) {
             throw new IOException(type().displayName() + " installer completed, but no version profile was found in "
@@ -168,8 +172,8 @@ public class ForgeInstaller implements LoaderInstaller {
         }
 
         writeInstallState(minecraftVersion, forgeVersion, fullVersion, versionId);
-        listener.onProgress("Установка " + type().displayName(), 3, 3, versionId);
-        listener.onMessage("Профиль установлен и проверен: " + versionId);
+        listener.onProgress(Strings.get("forge.stageTitle", type().displayName()), 3, 3, versionId);
+        listener.onMessage(Strings.get("forge.profileVerified", versionId));
         return versionId;
     }
 
@@ -200,10 +204,10 @@ public class ForgeInstaller implements LoaderInstaller {
                     || !Files.isRegularFile(paths.versionJar(inherited)))) {
                 return null;
             }
-            listener.onMessage("Generated profile выбран: " + versionId);
+            listener.onMessage(Strings.get("forge.profileSelected", versionId));
             return versionId;
         } catch (IOException | RuntimeException e) {
-            listener.onMessage("Marker установки недействителен: " + e.getMessage());
+            listener.onMessage(Strings.get("forge.markerInvalid", e.getMessage()));
             return null;
         }
     }
@@ -265,10 +269,11 @@ public class ForgeInstaller implements LoaderInstaller {
 
         RemoteVersion remote;
         try {
-            remote = VersionManifest.fetch(downloader).byId(minecraftVersion);
+            remote = VersionManifest.fetchCached(downloader, paths.versionManifestCacheFile(),
+                    Duration.ofHours(6), settings.offlineMode).byId(minecraftVersion);
         } catch (IOException e) {
             if (Files.exists(versionJar)) {
-                listener.onMessage("Список версий недоступен — проверка ванильного клиента пропущена");
+                listener.onMessage(Strings.get("forge.vanillaCheckSkipped"));
                 return;
             }
             throw e;
@@ -277,7 +282,7 @@ public class ForgeInstaller implements LoaderInstaller {
             return;
         }
 
-        listener.onProgress("Проверка ванильного клиента", 0, 1, minecraftVersion + ".jar");
+        listener.onProgress(Strings.get("forge.checkingVanilla"), 0, 1, minecraftVersion + ".jar");
         Files.createDirectories(versionJar.getParent());
         downloader.download(remote.url, versionJson, remote.sha1);
 
@@ -294,13 +299,12 @@ public class ForgeInstaller implements LoaderInstaller {
 
         boolean wasBroken = Files.exists(versionJar) && !HashUtil.verify(versionJar, sha1);
         if (wasBroken) {
-            listener.onMessage("Ванильный " + minecraftVersion
-                    + ".jar повреждён или изменён — скачиваем заново");
+            listener.onMessage(Strings.get("forge.vanillaBroken", minecraftVersion));
             Files.deleteIfExists(versionJar);
         }
         downloader.download(url, versionJar, sha1);
-        listener.onProgress("Проверка ванильного клиента", 1, 1,
-                wasBroken ? "файл восстановлен" : "файл в порядке");
+        listener.onProgress(Strings.get("forge.checkingVanilla"), 1, 1,
+                wasBroken ? Strings.get("forge.vanillaRestored") : Strings.get("forge.vanillaOk"));
     }
 
     protected void cleanupPatchedArtifacts(String minecraftVersion, ProgressListener listener) {
@@ -323,10 +327,10 @@ public class ForgeInstaller implements LoaderInstaller {
                 }
             }
         } catch (IOException e) {
-            listener.onMessage("Не удалось очистить промежуточные файлы: " + e.getMessage());
+            listener.onMessage(Strings.get("forge.cleanupFailed", e.getMessage()));
             return;
         }
-        listener.onMessage("Удалено промежуточных файлов: " + removed);
+        listener.onMessage(Strings.get("forge.cleanupRemoved", removed));
     }
 
     protected static final class ProcessorMismatchException extends IOException {
@@ -380,8 +384,8 @@ public class ForgeInstaller implements LoaderInstaller {
             while ((line = reader.readLine()) != null) {
                 if (isPerFileNoise(line)) {
                     if (++counter % 500 == 0) {
-                        listener.onProgress("Патчинг клиента", counter, 0,
-                                "файлов обработано: " + counter);
+                        listener.onProgress(Strings.get("forge.patching"), counter, 0,
+                                Strings.get("forge.filesProcessed", counter));
                     }
                     continue;
                 }

@@ -25,6 +25,7 @@ public final class IconCache {
     private static final int MAX_MEMORY_ENTRIES = 300;
     private static final long MAX_ICON_BYTES = 8L * 1024 * 1024;
     private static final int MAX_REDIRECTS = 5;
+    private static final int MAX_ICON_DIMENSION = 4096;
 
     private final Path cacheDir;
     private final Map<String, BufferedImage> memoryCache = new ConcurrentHashMap<>();
@@ -106,7 +107,7 @@ public final class IconCache {
             
             SafeNetwork.validateResolvedAddresses(current);
             HttpURLConnection connection = (HttpURLConnection) current.toURL().openConnection();
-            connection.setRequestProperty("User-Agent", "AgroLauncher/1.0");
+            connection.setRequestProperty("User-Agent", by.agro.launcher.core.LauncherVersion.USER_AGENT);
             connection.setConnectTimeout(12_000);
             connection.setReadTimeout(20_000);
             connection.setInstanceFollowRedirects(false);
@@ -131,12 +132,33 @@ public final class IconCache {
             }
             try (InputStream raw = connection.getInputStream();
                  InputStream limited = new LimitedInputStream(raw, MAX_ICON_BYTES)) {
-                return ImageIO.read(limited);
+                return decodeWithDimensionLimit(limited);
             } finally {
                 connection.disconnect();
             }
         }
         throw new IOException("Too many icon redirects");
+    }
+
+    private static BufferedImage decodeWithDimensionLimit(InputStream limited) throws IOException {
+        try (var stream = ImageIO.createImageInputStream(limited)) {
+            var readers = ImageIO.getImageReaders(stream);
+            if (!readers.hasNext()) {
+                return null;
+            }
+            var reader = readers.next();
+            try {
+                reader.setInput(stream);
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                if (width > MAX_ICON_DIMENSION || height > MAX_ICON_DIMENSION) {
+                    throw new IOException("Icon dimensions exceed limit: " + width + "x" + height);
+                }
+                return reader.read(0);
+            } finally {
+                reader.dispose();
+            }
+        }
     }
 
     private static final class LimitedInputStream extends java.io.FilterInputStream {

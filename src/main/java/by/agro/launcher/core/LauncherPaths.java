@@ -240,7 +240,6 @@ public final class LauncherPaths {
         return instancesDir().resolve(safePathSegment(profileId, "profile ID"));
     }
 
-
     public Path installationGameDir(String minecraftVersion, String loaderType, String loaderVersion) {
         String minecraft = safePathSegment(minecraftVersion, "Minecraft version");
         String loader = safePathSegment(
@@ -361,7 +360,6 @@ public final class LauncherPaths {
                 || value.indexOf('/') >= 0 || value.indexOf('\\') >= 0) {
             throw new IllegalArgumentException("Unsafe " + description + ": " + value);
         }
-
         String pattern = allowDots ? "[A-Za-z0-9_.-]+" : "[A-Za-z0-9_.+~-]+";
         if (!value.matches(pattern)) {
             throw new IllegalArgumentException("Invalid " + description + ": " + value);

@@ -34,6 +34,10 @@ public final class SafeNetwork {
     }
 
     public static void validateResolvedAddresses(URI uri) throws IOException {
+        resolveAndValidate(uri);
+    }
+
+    public static InetAddress[] resolveAndValidate(URI uri) throws IOException {
         final InetAddress[] addresses;
         try {
             addresses = InetAddress.getAllByName(uri.getHost());
@@ -49,6 +53,7 @@ public final class SafeNetwork {
                         + ": " + address.getHostAddress());
             }
         }
+        return addresses;
     }
 
     private static boolean isPublic(InetAddress address) {
@@ -74,8 +79,13 @@ public final class SafeNetwork {
         }
         int first = bytes[0] & 0xff;
         int second = bytes[1] & 0xff;
+        int third = bytes[2] & 0xff;
+        int fourth = bytes[3] & 0xff;
+        boolean teredoOrDocumentation = first == 0x20 && second == 0x01
+                && ((third == 0x00 && fourth == 0x00) || (third == 0x0d && fourth == 0xb8));
         return !(first == 0 || first == 0xff
                 || (first == 0xfe && (second & 0xc0) == 0x80)
-                || (first & 0xfe) == 0xfc);
+                || (first & 0xfe) == 0xfc
+                || teredoOrDocumentation);
     }
 }

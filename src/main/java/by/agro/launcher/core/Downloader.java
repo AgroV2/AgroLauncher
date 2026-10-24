@@ -6,6 +6,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpCookie;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.Proxy;
+import java.net.Socket;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -24,7 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public final class Downloader {
 
-    private static final String USER_AGENT = "AgroLauncher/1.0";
+    private static final String USER_AGENT = LauncherVersion.USER_AGENT;
     private static final int CONNECT_TIMEOUT_MS = 20_000;
     private static final int READ_TIMEOUT_MS = 60_000;
     private static final int MAX_RETRIES = 3;
@@ -32,9 +35,62 @@ public final class Downloader {
     private static final long DEFAULT_MAX_DOWNLOAD_BYTES = 512L * 1024 * 1024;
     private static final long MAX_TEXT_BYTES = 16L * 1024 * 1024;
 
+    private static volatile Proxy proxy = Proxy.NO_PROXY;
+
     private final int threads;
     private final DownloadManager downloadManager;
-    private final Map<String, Map<String, String>> cookiesByHost = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, CookieRecord>> cookiesByHost = new ConcurrentHashMap<>();
+    private final ExecutorService pool;
+
+    private static final class CookieRecord {
+        final String value;
+        final long expiresAtMs;
+
+        CookieRecord(String value, long maxAgeSeconds) {
+            this.value = value;
+            this.expiresAtMs = maxAgeSeconds >= 0
+                    ? System.currentTimeMillis() + maxAgeSeconds * 1000L
+                    : Long.MAX_VALUE;
+        }
+
+        boolean expired() {
+            return System.currentTimeMillis() >= expiresAtMs;
+        }
+    }
+
+    public static void configureProxy(String mode, String host, int port) {
+        if (mode == null || "NONE".equalsIgnoreCase(mode)
+                || host == null || host.isBlank() || port <= 0 || port > 65535) {
+            proxy = Proxy.NO_PROXY;
+            return;
+        }
+        Proxy.Type type = "SOCKS".equalsIgnoreCase(mode) ? Proxy.Type.SOCKS : Proxy.Type.HTTP;
+        proxy = new Proxy(type, new java.net.InetSocketAddress(host, port));
+    }
+
+    public static Proxy configuredProxy() {
+        return proxy;
+    }
+
+    private static final java.util.Map<Path, String> VERIFIED_FILES =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public boolean verifyOnce(Path target, String expectedSha1) {
+        if (target == null) {
+            return false;
+        }
+        if (expectedSha1 == null || expectedSha1.isBlank()) {
+            return HashUtil.verify(target, expectedSha1);
+        }
+        if (expectedSha1.equalsIgnoreCase(VERIFIED_FILES.get(target))) {
+            return true;
+        }
+        boolean verified = HashUtil.verify(target, expectedSha1);
+        if (verified) {
+            VERIFIED_FILES.put(target, expectedSha1);
+        }
+        return verified;
+    }
 
     public Downloader() {
         this(Math.max(4, Math.min(16, Runtime.getRuntime().availableProcessors() * 2)), new DownloadManager());
@@ -47,10 +103,19 @@ public final class Downloader {
     public Downloader(int threads, DownloadManager downloadManager) {
         this.threads = Math.max(1, Math.min(32, threads));
         this.downloadManager = java.util.Objects.requireNonNull(downloadManager, "downloadManager");
+        this.pool = Executors.newFixedThreadPool(this.threads, r -> {
+            Thread t = new Thread(r, "agro-downloader");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     public DownloadManager downloadManager() {
         return downloadManager;
+    }
+
+    public static final class HashMismatchException extends IOException {
+        public HashMismatchException(String message) { super(message); }
     }
 
     public static final class Task {
@@ -72,53 +137,34 @@ public final class Downloader {
     }
 
     public void downloadAll(List<Task> tasks, String stageName, ProgressListener listener) throws IOException {
-        List<Task> pending = new ArrayList<>();
-        for (Task task : tasks) {
-            if (!HashUtil.verify(task.target, task.sha1)) {
-                pending.add(task);
-            }
-        }
+        List<Task> pending = filterUnverified(tasks);
         if (pending.isEmpty()) {
             listener.onProgress(stageName, 1, 1, by.agro.launcher.i18n.Strings.get("progress.allDownloaded"));
             return;
         }
 
-        ExecutorService pool = Executors.newFixedThreadPool(Math.min(threads, pending.size()), r -> {
-            Thread t = new Thread(r, "agro-downloader");
-            t.setDaemon(true);
-            return t;
-        });
         AtomicInteger done = new AtomicInteger();
         AtomicReference<Exception> firstError = new AtomicReference<>();
         int total = pending.size();
         List<Future<?>> futures = new ArrayList<>(total);
-        try {
-            for (Task task : pending) {
-                futures.add(pool.submit(() -> {
-                    try {
-                        if (firstError.get() == null) {
-                            download(task.url, task.target, task.sha1, task.size);
-                            int n = done.incrementAndGet();
-                            listener.onProgress(stageName, n, total, task.target.getFileName().toString());
-                        }
-                    } catch (Exception e) {
-                        firstError.compareAndSet(null, e);
-                    }
-                }));
-            }
-            for (Future<?> future : futures) {
+        for (Task task : pending) {
+            futures.add(pool.submit(() -> {
                 try {
-                    future.get();
+                    if (firstError.get() == null) {
+                        download(task.url, task.target, task.sha1, task.size);
+                        int n = done.incrementAndGet();
+                        listener.onProgress(stageName, n, total, task.target.getFileName().toString());
+                    }
                 } catch (Exception e) {
                     firstError.compareAndSet(null, e);
                 }
-            }
-        } finally {
-            pool.shutdown();
+            }));
+        }
+        for (Future<?> future : futures) {
             try {
-                pool.awaitTermination(5, TimeUnit.SECONDS);
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt();
+                future.get();
+            } catch (Exception e) {
+                firstError.compareAndSet(null, e);
             }
         }
         if (firstError.get() != null) {
@@ -131,7 +177,7 @@ public final class Downloader {
     }
 
     public void download(String url, Path target, String expectedSha1, long expectedSize) throws IOException {
-        if (HashUtil.verify(target, expectedSha1)) {
+        if (verifyOnce(target, expectedSha1)) {
             return;
         }
         DownloadManager.Handle handle = downloadManager.queued(target.getFileName().toString(), url, target, expectedSize);
@@ -157,16 +203,26 @@ public final class Downloader {
                 if (expectedSha1 != null && !expectedSha1.isBlank()) {
                     String actual = HashUtil.sha1(temp);
                     if (!actual.equalsIgnoreCase(expectedSha1)) {
-                        throw new IOException("SHA-1 mismatch for " + handle.url() + " (expected "
+                        throw new HashMismatchException("SHA-1 mismatch for " + handle.url() + " (expected "
                                 + expectedSha1 + ", got " + actual + ")");
                     }
                 }
                 SecureFiles.atomicReplace(temp, handle.target().toAbsolutePath().normalize());
+                if (expectedSha1 != null && !expectedSha1.isBlank()) {
+                    VERIFIED_FILES.put(handle.target().toAbsolutePath().normalize(), expectedSha1);
+                }
                 downloadManager.completed(handle);
                 return;
             } catch (IOException e) {
                 last = e;
                 if (e instanceof DownloadManager.CancelledException) break;
+                if (e instanceof HashMismatchException || isRangeNotSatisfiable(e)) {
+                    try {
+                        Files.deleteIfExists(temp);
+                    } catch (IOException cleanupFailure) {
+                        last.addSuppressed(cleanupFailure);
+                    }
+                }
                 if (attempt < MAX_RETRIES) {
                     try { Thread.sleep(500L * attempt); }
                     catch (InterruptedException interrupted) {
@@ -180,6 +236,37 @@ public final class Downloader {
         downloadManager.failed(handle, last);
         if (last instanceof DownloadManager.CancelledException) throw last;
         throw new IOException("Failed to download " + handle.url() + " after " + MAX_RETRIES + " attempts", last);
+    }
+
+    private List<Task> filterUnverified(List<Task> tasks) {
+        List<Task> pending = new ArrayList<>();
+        if (tasks.size() >= 16) {
+            List<java.util.concurrent.Future<Boolean>> checks = new ArrayList<>(tasks.size());
+            for (Task task : tasks) {
+                checks.add(pool.submit(() -> verifyOnce(task.target, task.sha1)));
+            }
+            for (int i = 0; i < tasks.size(); i++) {
+                try {
+                    if (!checks.get(i).get()) {
+                        pending.add(tasks.get(i));
+                    }
+                } catch (Exception e) {
+                    pending.add(tasks.get(i));
+                }
+            }
+            return pending;
+        }
+        for (Task task : tasks) {
+            if (!verifyOnce(task.target, task.sha1)) {
+                pending.add(task);
+            }
+        }
+        return pending;
+    }
+
+    private static boolean isRangeNotSatisfiable(IOException error) {
+        String message = error.getMessage();
+        return message != null && message.startsWith("HTTP 416");
     }
 
     public void downloadVerified(String url, Path target, String algorithm, String expectedDigest,
@@ -326,10 +413,19 @@ public final class Downloader {
     }
 
     private HttpURLConnection open(URI uri, Map<String, String> headers) throws IOException {
-        
-        SafeNetwork.validateResolvedAddresses(uri);
+
+        InetAddress[] validated = SafeNetwork.resolveAndValidate(uri);
         URL parsed = uri.toURL();
-        HttpURLConnection connection = (HttpURLConnection) parsed.openConnection();
+        HttpURLConnection connection = (HttpURLConnection) parsed.openConnection(proxy);
+        if (proxy == Proxy.NO_PROXY && connection instanceof javax.net.ssl.HttpsURLConnection https
+                && validated.length > 0) {
+            https.setSSLSocketFactory(new PinnedAddressSSLSocketFactory(validated[0], uri.getHost()));
+            String hostHeader = uri.getHost();
+            if (uri.getPort() != -1 && uri.getPort() != 443) {
+                hostHeader = hostHeader + ":" + uri.getPort();
+            }
+            https.setRequestProperty("Host", hostHeader);
+        }
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
         connection.setReadTimeout(READ_TIMEOUT_MS);
@@ -350,7 +446,7 @@ public final class Downloader {
     }
 
     private void collectCookies(HttpURLConnection connection, URI origin) {
-        Map<String, String> hostCookies = cookiesByHost.computeIfAbsent(
+        Map<String, CookieRecord> hostCookies = cookiesByHost.computeIfAbsent(
                 origin.getHost().toLowerCase(), ignored -> new ConcurrentHashMap<>());
         for (Map.Entry<String, List<String>> header : connection.getHeaderFields().entrySet()) {
             if (header.getKey() == null || !"set-cookie".equalsIgnoreCase(header.getKey())) {
@@ -362,7 +458,8 @@ public final class Downloader {
                         String domain = cookie.getDomain();
                         if (domain == null || domain.isBlank()
                                 || domain.replaceFirst("^\\.", "").equalsIgnoreCase(origin.getHost())) {
-                            hostCookies.put(cookie.getName(), cookie.getValue());
+                            hostCookies.put(cookie.getName(),
+                                    new CookieRecord(cookie.getValue(), cookie.getMaxAge()));
                         }
                     }
                 } catch (IllegalArgumentException ignored) {
@@ -373,17 +470,82 @@ public final class Downloader {
     }
 
     private String cookieHeader(String host) {
-        Map<String, String> hostCookies = cookiesByHost.get(host.toLowerCase());
+        Map<String, CookieRecord> hostCookies = cookiesByHost.get(host.toLowerCase());
         if (hostCookies == null || hostCookies.isEmpty()) {
             return null;
         }
         StringBuilder result = new StringBuilder();
-        for (Map.Entry<String, String> cookie : hostCookies.entrySet()) {
+        for (Map.Entry<String, CookieRecord> cookie : hostCookies.entrySet()) {
+            if (cookie.getValue().expired()) {
+                hostCookies.remove(cookie.getKey(), cookie.getValue());
+                continue;
+            }
             if (result.length() > 0) {
                 result.append("; ");
             }
-            result.append(cookie.getKey()).append('=').append(cookie.getValue());
+            result.append(cookie.getKey()).append('=').append(cookie.getValue().value);
         }
-        return result.toString();
+        return result.length() == 0 ? null : result.toString();
+    }
+    private static final class PinnedAddressSSLSocketFactory extends javax.net.ssl.SSLSocketFactory {
+        private final javax.net.ssl.SSLSocketFactory delegate =
+                (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
+        private final InetAddress address;
+        private final String host;
+
+        PinnedAddressSSLSocketFactory(InetAddress address, String host) {
+            this.address = address;
+            this.host = host;
+        }
+
+        private javax.net.ssl.SSLSocket pinned(int port) throws IOException {
+            javax.net.ssl.SSLSocket socket = (javax.net.ssl.SSLSocket) delegate.createSocket(address, port);
+            try {
+                javax.net.ssl.SSLParameters parameters = socket.getSSLParameters();
+                parameters.setServerNames(java.util.List.of(new javax.net.ssl.SNIHostName(host)));
+                socket.setSSLParameters(parameters);
+            } catch (RuntimeException ignored) {
+
+            }
+            return socket;
+        }
+
+        @Override
+        public Socket createSocket(String host, int port) throws IOException {
+            return pinned(port);
+        }
+
+        @Override
+        public Socket createSocket(String host, int port, InetAddress localAddress, int localPort)
+                throws IOException {
+            return pinned(port);
+        }
+
+        @Override
+        public Socket createSocket(InetAddress address, int port) throws IOException {
+            return pinned(port);
+        }
+
+        @Override
+        public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort)
+                throws IOException {
+            return pinned(port);
+        }
+
+        @Override
+        public Socket createSocket(Socket socket, String host, int port, boolean autoClose)
+                throws IOException {
+            return delegate.createSocket(socket, host, port, autoClose);
+        }
+
+        @Override
+        public String[] getDefaultCipherSuites() {
+            return delegate.getDefaultCipherSuites();
+        }
+
+        @Override
+        public String[] getSupportedCipherSuites() {
+            return delegate.getSupportedCipherSuites();
+        }
     }
 }

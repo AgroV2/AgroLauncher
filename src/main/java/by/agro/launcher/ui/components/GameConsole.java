@@ -129,26 +129,38 @@ public final class GameConsole extends JPanel {
     }
 
     private SimpleAttributeSet styleFor(String line) {
-        String upper = line.toUpperCase();
-        if (upper.contains("/ERROR") || upper.contains("[ERROR]") || upper.contains("SEVERE")
-                || upper.contains("EXCEPTION") || upper.startsWith("\tAT ")
-                || upper.contains("CAUSED BY")) {
+        if (containsIgnoreCase(line, "/ERROR") || containsIgnoreCase(line, "[ERROR]")
+                || containsIgnoreCase(line, "SEVERE") || containsIgnoreCase(line, "EXCEPTION")
+                || containsIgnoreCase(line, "\tAT ") || containsIgnoreCase(line, "CAUSED BY")) {
             return styleError;
         }
-        if (upper.contains("/WARN") || upper.contains("[WARN]") || upper.contains("WARNING")) {
+        if (containsIgnoreCase(line, "/WARN") || containsIgnoreCase(line, "[WARN]")
+                || containsIgnoreCase(line, "WARNING")) {
             return styleWarning;
         }
-        if (upper.contains("/INFO") || upper.contains("[INFO]")) {
+        if (containsIgnoreCase(line, "/INFO") || containsIgnoreCase(line, "[INFO]")) {
             return styleInfo;
         }
         if (line.startsWith(Strings.get("console.launcherPrefix"))
                 || line.startsWith("[installer]") || line.startsWith("[optifine]")) {
             return styleLauncher;
         }
-        if (upper.contains("/DEBUG") || upper.contains("[DEBUG]") || upper.contains("/TRACE")) {
+        if (containsIgnoreCase(line, "/DEBUG") || containsIgnoreCase(line, "[DEBUG]")
+                || containsIgnoreCase(line, "/TRACE")) {
             return styleMuted;
         }
         return styleDefault;
+    }
+
+    private static boolean containsIgnoreCase(String line, String token) {
+        int tokenLength = token.length();
+        int last = line.length() - tokenLength;
+        for (int i = 0; i <= last; i++) {
+            if (line.regionMatches(true, i, token, 0, tokenLength)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void trimIfNeeded() throws BadLocationException {

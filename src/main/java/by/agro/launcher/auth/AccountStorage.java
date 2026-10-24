@@ -19,10 +19,14 @@ public final class AccountStorage {
     private final LauncherPaths paths;
     private final CredentialStore credentials = CredentialStore.system();
     private final List<Account> accounts = new ArrayList<>();
+    private volatile boolean secretsLoaded;
 
     public AccountStorage(LauncherPaths paths) {
         this.paths = paths;
-        load();
+        loadMetadata();
+        Thread secretsThread = new Thread(this::loadSecrets, "agro-account-secrets");
+        secretsThread.setDaemon(true);
+        secretsThread.start();
     }
 
     public List<Account> accounts() {
@@ -64,7 +68,7 @@ public final class AccountStorage {
         persist();
     }
 
-    private void load() {
+    private void loadMetadata() {
         accounts.clear();
         try {
             SecureFiles.rejectSymlinkParents(paths.accountsFile());
@@ -79,7 +83,6 @@ public final class AccountStorage {
                 if (loaded != null) {
                     for (Account account : loaded) {
                         if (account != null && account.username != null && !account.username.isBlank()) {
-                            restoreOrMigrateSecrets(account);
                             accounts.add(account);
                         }
                     }
@@ -87,6 +90,23 @@ public final class AccountStorage {
             }
         } catch (IOException | RuntimeException e) {
             System.err.println("Не удалось прочитать accounts.json: " + e.getMessage());
+        }
+    }
+
+    private synchronized void loadSecrets() {
+        if (secretsLoaded) {
+            return;
+        }
+        for (Account account : accounts) {
+            if (account.isOffline()) continue;
+            restoreOrMigrateSecrets(account);
+        }
+        secretsLoaded = true;
+    }
+
+    public synchronized void awaitSecrets() {
+        if (!secretsLoaded) {
+            loadSecrets();
         }
     }
 

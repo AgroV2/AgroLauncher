@@ -1,6 +1,6 @@
 # AgroLauncher
 
-A cross-platform Minecraft launcher written in Java, with English and Russian UI, automatic Java management, loader installation, Modrinth integration, independent mod builds, recovery tools, and extensive appearance customization.
+A cross-platform Minecraft launcher written in Java, with English and Russian UI, automatic Java management, loader installation, Modrinth integration (mods, resource packs, shaders and modpacks), isolated instances, independent mod builds, backups and repair tools, and extensive appearance customization including Liquid Glass and Material You styles.
 
 The launcher targets **Windows** and **Linux** and includes macOS-aware code paths. Maven produces a self-contained executable JAR and can package a Windows x64 portable distribution with a bundled Java runtime.
 
@@ -9,19 +9,21 @@ The launcher targets **Windows** and **Linux** and includes macOS-aware code pat
 - Releases, snapshots, and old versions can be shown independently.
 - Vanilla, Fabric, Quilt, Forge, NeoForge, and OptiFine installation and launch.
 - Automatic Java requirement detection, Adoptium runtime download, AUTO/managed/system/custom Java modes, RAM and launch-argument controls, and launch preflight checks.
-- Offline profiles, Ely.by password/2FA authentication, and Ely.by OAuth2 with PKCE S256.
+- **Isolated instances**: every Minecraft + loader + loader-version combination gets its own game directory, managed on the dedicated Instances screen (play, open folder, delete) together with independent named mod builds.
+- Offline profiles, Ely.by password/2FA authentication, and Ely.by OAuth2 with PKCE S256 (tokens refresh automatically before they expire).
 - Tokens are stored in Windows Credential Manager, macOS Keychain, or Linux Secret Service (`secret-tool`), with migration from legacy plaintext storage where possible.
 - A shared download manager beside the game console shows progress and speed, supports pause/resume/cancel, appears when downloads start, and auto-hides after activity finishes.
-- Resumable partial downloads use HTTP Range when supported, with parallel transfers, retries, limits, and hash verification where metadata is available.
-- Modrinth browsing and installation for mods, resource packs, and shaders, including optional automatic dependency installation.
-- Independent named mod builds keep separate game directories and mod snapshots for a selected Minecraft version and loader.
-- Installation manifests track managed files with size, provenance, and SHA-256. Repair re-downloads managed content, reinstalls loaders, uses staged transactions/rollback, and creates a backup first.
-- Backups cover saves, configuration, options, servers, resource packs, shader packs, and launcher manifests; entries are verified before restore and old backups are pruned.
+- Resumable partial downloads use HTTP Range when supported, with parallel transfers, retries, limits, and hash verification; corrupted partial files are discarded on hash mismatch instead of poisoning retries.
+- **Modrinth modpacks**: browse the catalog, install modpacks as separate instances, import local `.mrpack` files (with a visible badge, unpack button and progress bar), and export your current setup as a `.mrpack`.
+- Modrinth browsing and installation for mods, resource packs, and shaders, including optional automatic dependency installation (downloads run in parallel).
+- **Quick server join**: enter an address on the Play tab and PLAY connects via `--server/--port`. The MargyCraft button joins the MargyCraft server on the latest vanilla release in one click.
 - Launch diagnostics detect common Java, memory, dependency, Mixin, native/OpenGL, archive, authentication, and network failures. Sanitized TXT/JSON reports redact sensitive data.
-- Nine theme presets, custom accent color, Blazing Flame/Deep Sea/Rainbow/Monochrome gradients, and custom gradients with up to ten colors.
-- PNG/JPG/GIF backgrounds, blur, dimming, panel opacity, and separate window opacity. Window opacity is applied only when supported; otherwise the window remains opaque.
-- GitHub release checks prompt before updating, select a compatible JAR, optionally verify SHA-256, validate and install it, preserve the previous launcher, and roll back if replacement or restart fails.
-- English and Russian UI with live language switching.
+- Installation manifests track managed files; Repair re-downloads managed content, reinstalls loaders, uses staged transactions/rollback, and creates a verified backup first — backups can be browsed and restored from Settings → Backups.
+- Nine theme presets, custom accent color, gradients (including Material You and four new presets), and custom gradients with up to ten colors.
+- **Interface styles as preset cards**: Default, Material You, and Liquid Glass — translucent theme-tinted glass panels. Theme and gradient changes recolor the entire UI instantly, without a restart.
+- PNG/JPG/GIF backgrounds, blur (FPS-capped animation), dimming, panel opacity, and separate window opacity. The frameless window can be dragged and resized.
+- Proxy support (HTTP/SOCKS) for launcher traffic; GitHub release checks with staged updates, optional SHA-256 verification, rollback and in-app updates from the About screen.
+- English and Russian UI with live language switching; all service messages are localized.
 
 ## Java compatibility fallback
 
@@ -43,23 +45,135 @@ mvn clean package
 java -jar target/AgroLauncher.jar
 ```
 
-The shaded JAR contains runtime dependencies. Maven also includes Windows x64 portable packaging with a bundled Java 17 runtime.
+The shaded JAR (~6 MB) contains runtime dependencies. Maven also includes Windows x64 portable packaging with a bundled Java 17 runtime.
+
+### Command-line arguments
+
+```
+--help, -h                 help
+--version                  launcher version
+--data-dir <path>          custom data directory (portable mode)
+--dry-run <version> [nick] prepare a version and print the launch command without starting the game
+```
 
 ## Configuration notes
 
-Ely.by OAuth requires `elyOAuthAuthorizationEndpoint`, `elyOAuthTokenEndpoint`, `elyOAuthProfileEndpoint`, and `elyOAuthClientId` in `settings.json`; `elyOAuthScope`, `elyOAuthCallbackPort`, and `elyOAuthTimeoutSeconds` are optional. The registered redirect URI must allow `http://127.0.0.1:<port>/oauth/callback`; port `0` selects a free port. `elySkinUrlTemplate` supports `{uuid}` and `{username}` and is used only when the profile has no skin URL.
+- Ely.by OAuth requires `elyOAuthAuthorizationEndpoint`, `elyOAuthTokenEndpoint`, `elyOAuthProfileEndpoint`, and `elyOAuthClientId` in `settings.json`; `elyOAuthScope`, `elyOAuthCallbackPort`, and `elyOAuthTimeoutSeconds` are optional. **OAuth endpoints must point to `ely.by`** — any other domain is rejected to prevent phishing through a tampered settings file. The registered redirect URI must allow `http://127.0.0.1:<port>/oauth/callback`; port `0` selects a free port.
+- `elySkinUrlTemplate` supports `{uuid}` and `{username}` and is used only when the profile has no skin URL.
+- `proxyMode` (`NONE`/`HTTP`/`SOCKS`), `proxyHost` and `proxyPort` route launcher downloads through a proxy.
+- `quickPlayServer` remembers the quick-join address; `updateAutoCheck` toggles the startup update check.
+- Updates use `githubRepository` (default: `AgroV2/AgroLauncher`).
 
-Updates use `githubRepository` (default: `AgroV2/AgroLauncher`). Launcher metadata, managed runtimes, backups, mod builds, and Minecraft data are stored under the platform-specific launcher directory; secrets remain in the system credential store.
+## Where files are stored
+
+| System | Path |
+|---|---|
+| Windows | `%APPDATA%\.agrolauncher` |
+| Linux | `~/.agrolauncher` (or `$XDG_DATA_HOME/agrolauncher`) |
+| macOS | `~/Library/Application Support/agrolauncher` |
+
+```
+.agrolauncher/
+├── minecraft/                 shared game files (versions, libraries, assets)
+├── instances/installations/   isolated game directories per version+loader
+├── mod-builds/                independent named mod builds
+├── backups/                   verified launcher backups
+├── runtimes/                  automatically downloaded JREs
+├── authlib/                   authlib-injector.jar for Ely.by
+├── cache/                     metadata, icons, installers, downloaded modpacks
+├── logs/                      sanitized launch session logs
+├── transactions/              repair staging area
+├── settings.json              settings (owner-only permissions)
+└── accounts.json              non-secret account metadata only
+```
+
+## First launch
+
+1. Open **Accounts** → enter a nickname → add a profile, or sign in via Ely.by.
+2. Open **Versions** → pick a Minecraft version and a mod loader.
+3. Optionally open **Mods** → the Modpacks tab to install a Modrinth modpack, or press "Import .mrpack" for a local file — modpacks appear on the **Instances** screen and are selected automatically.
+4. Set RAM and other options in **Settings** (the Network card holds the proxy).
+5. Return to **Play** and press PLAY. The mod loader is installed automatically on first launch of a combination.
+
+Mods and modpacks live in the installation's own `mods` directory; the Mods screen always shows which directory is active, warns about `.mrpack` files dropped into `mods`, and offers one-click switching to the installation that has your mods.
+
+## Windows x64 EXE: cross-building on Linux
+
+The `windows-portable` Maven profile builds the Windows launcher with Launch4j, downloads a pinned Eclipse Temurin JRE 17 for Windows x64 and places it next to the JAR. End users do not need Java installed.
+
+```bash
+mvn clean verify -Pwindows-portable
+```
+
+Results: a portable folder `target/AgroLauncher-Windows-x64/` (with `AgroLauncher.exe`, `AgroLauncher.jar` and `runtime/`) and `target/AgroLauncher-Windows-x64-Portable.zip`. This is not a single self-contained EXE: `AgroLauncher.exe` uses the adjacent `AgroLauncher.jar` and `runtime/`. The profile does not use `jpackage`, Windows, or WiX.
+
+Data from the previous launcher generation (`.emeraldlauncher`) is migrated automatically on first start.
+
+## Important limitation
+
+The launcher works **only with `online-mode=false` servers** (offline servers). Offline profiles do not pass Mojang license verification and cannot join official servers; the launcher does not circumvent Mojang/Microsoft authentication — it only generates the same local UUID a server generates in `online-mode=false`. For skins and third-party account services use **Ely.by**, a legal third-party provider.
+
+## Architecture
+
+```
+by.agro.launcher
+├── Main                    entry point, CLI modes
+├── LauncherContext         shared service context
+├── core/                   platform, paths, settings, downloader (DNS-pinned
+│                           HTTPS, resume, verification cache), JSON, hashes
+├── version/                Mojang manifests, library rules, version chain
+│                           inheritance, assets, natives
+├── loaders/                Fabric, Quilt, Forge, NeoForge, OptiFine installers
+├── auth/                   offline profiles, Ely.by, OAuth (ely.by-only
+│                           endpoints), authlib-injector, credential stores
+├── jvm/                    Java detection and download, archive extraction
+├── launch/                 launch command assembly, process, preflight
+├── modrinth/               catalog client, mod installer, modpacks (.mrpack
+│                           import/export), icon cache
+├── mods/                   mod file management, named mod builds
+├── integrity/              installation manifests (SHA-256, provenance)
+├── repair/                 staged repair transactions with rollback
+├── backup/                 verified backups with restore
+├── cleanup/                reachability and cache cleanup plans
+├── diagnostics/            launch sessions, log analysis, redaction
+├── offline/                offline-mode policy
+├── update/                 GitHub release checks, staged self-update
+├── i18n/                   RU/EN texts (with a MessageFormat cache)
+└── ui/                     themes and palettes, interface styles, background
+                            with blur, window, screens, instances/backups UI
+```
+
+**Key technical decisions**
+
+- **Version inheritance.** Loader profiles reference the vanilla version via `inheritsFrom`; the resolver merges the chain, deduplicating libraries only across manifests to keep OS-specific LWJGL builds in 1.7–1.12.
+- **Vanilla client verification before Forge installs.** The vanilla jar is checked against Mojang's hash and re-downloaded when modified; intermediate files are cleaned and the install retried once on processor hash mismatches.
+- **Three argument formats**: `arguments` (1.13+), `minecraftArguments` (1.7–1.12), and pre-1.6 with `${auth_session}`.
+- **Own tar.gz extractor** for JRE archives with symlink handling and path-traversal protection.
+- **Verification cache.** Successfully verified files are remembered for the session, so repeated launches do not re-hash libraries and assets; large checks run in parallel.
+- **Dynamic palettes and live theming.** Colors derive from a background+accent pair in HSB; on theme or gradient change, colors (including derived accent shades and borders) are migrated across the whole component tree instantly.
+- **Liquid Glass rendering** is cached per card and rebuilds only on resize/theme/opacity changes; window resize uses a simplified fast mode.
+- **Security baseline.** HTTPS-only downloads with pre-validated addresses (DNS-rebinding protection), ely.by-only OAuth endpoints, zip-bomb limits for modpacks and natives, response size limits, owner-only permissions for settings and accounts, and HTML-neutralized remote strings.
+- **Localization lives in code**; screens are rebuilt on language switch, which is more reliable than walking the component tree.
+
+## Dependencies
+
+- [FlatLaf](https://www.formdev.com/flatlaf/) 3.6 — modern Swing look and feel
+- [Gson](https://github.com/google/gson) 2.11.0 — JSON handling
+- [JNA](https://github.com/java-native-access/jna) 5.16 — Windows Credential Manager, macOS Keychain, memory detection
+
+The mod catalog works through the open [Modrinth API](https://docs.modrinth.com/) — no key required. All libraries are bundled into the final JAR.
+
+## License
+
+Code provided as is. Minecraft is a trademark of Mojang AB; the launcher is not affiliated with Mojang or Microsoft.
 
 ---
 
-# AgroLauncher
+# AgroLauncher (рус.)
 
-Кроссплатформенный лаунчер Minecraft на Java: русский и английский интерфейс, каталог модов Modrinth, девять цветовых тем со своим цветом, настраиваемый фон и вход через Ely.by.
+Кроссплатформенный лаунчер Minecraft на Java: русский и английский интерфейс, автоматическое управление Java, загрузчики модов, каталог Modrinth (моды, ресурспаки, шейдеры и модпаки), изолированные инстансы, независимые мод-сборки, бэкапы и восстановление, широкая настройка оформления, включая стили Liquid Glass и Material You.
 
-Работает на **Windows** и **Linux** (код также учитывает macOS). Собирается в один исполняемый JAR без внешних зависимостей.
-
----
+Работает на **Windows** и **Linux** (код также учитывает macOS). Maven собирает один исполняемый JAR без внешних зависимостей и умеет паковать Windows x64 portable-дистрибутив со встроенной Java.
 
 ## Возможности
 
@@ -73,16 +187,20 @@ Updates use `githubRepository` (default: `AgroV2/AgroLauncher`). Launcher metada
 | NeoForge | 1.20.2+ | официальный установщик в headless-режиме |
 | OptiFine | все | патчинг через `optifine.Patcher` либо как мод к Forge |
 
+**Инстансы и модпаки**
+
+- Каждая связка «версия + загрузчик + версия загрузчика» — своя игровая папка; экран **Инстансы** управляет установками и мод-сборками (запустить, открыть папку, удалить).
+- **Модпаки Modrinth**: каталог, установка отдельными инстансами, импорт локальных `.mrpack` (бейдж «модпак», кнопки «Распаковать»/«Импорт», шкала прогресса) и экспорт текущей сборки в `.mrpack`.
+- Экран **Моды** всегда показывает, в какую папку ставятся моды, предупреждает о `.mrpack` в папке mods и переключает на установку с модами в один клик.
+
 **Аккаунты**
 
-- **Оффлайн-профиль** — только ник. UUID вычисляется тем же алгоритмом, что использует сервер Minecraft при `online-mode=false`, поэтому прогресс на серверах сохраняется между запусками.
-- **Ely.by** — вход по логину и паролю, поддержка двухфакторной аутентификации, скины и плащи через authlib-injector (скачивается автоматически).
-- **Ely.by OAuth2 + PKCE S256** — отдельный вход через системный браузер. Обязательно задайте в `settings.json` полученные при регистрации приложения значения `elyOAuthAuthorizationEndpoint`, `elyOAuthTokenEndpoint`, `elyOAuthProfileEndpoint` и `elyOAuthClientId`; при необходимости задайте `elyOAuthScope`. Redirect URI приложения должен разрешать loopback-адрес `http://127.0.0.1:<port>/oauth/callback`. `elyOAuthCallbackPort: 0` выбирает свободный динамический порт, а фиксированный порт можно указать явно. Таймаут задаётся через `elyOAuthTimeoutSeconds`. Endpoints и client ID намеренно не зашиты в код.
-- Если профиль Ely.by не возвращает URL скина, используется шаблон `elySkinUrlTemplate` из `settings.json`. По умолчанию задан официальный HTTPS endpoint `https://skinsystem.ely.by/skins/{username}.png`; поддерживаются URL-кодируемые placeholders `{uuid}` и `{username}`. Динамический `account.skinUrl` из профиля остаётся приоритетным.
+- **Оффлайн-профиль** — UUID вычисляется тем же алгоритмом, что использует сервер при `online-mode=false`.
+- **Ely.by** — логин/пароль и 2FA; скины и плащи через authlib-injector.
+- **Ely.by OAuth2 + PKCE S256** — вход через системный браузер, автоматическое обновление токенов. Endpoint'ы настраиваются в `settings.json` и **разрешены только на домене `ely.by`**.
+- Токены — в системном хранилище: Windows Credential Manager, macOS Keychain, Linux Secret Service (`secret-tool`).
 
 **Управление Java**
-
-Лаунчер сам определяет нужную версию и при необходимости скачивает её с Adoptium:
 
 | Версия Minecraft | Требуемая Java |
 |---|---|
@@ -91,115 +209,37 @@ Updates use `githubRepository` (default: `AgroV2/AgroLauncher`). Launcher metada
 | 1.20.5 – 1.21.x | 21 |
 | 26.x и новее | 25 |
 
-Точное требование берётся из манифеста версии, а список — резерв для старых сборок без этого поля. Если Mojang попросит версию новее известных, лаунчер скачает именно её.
-
-**Каталог модов**
-
-Встроенный браузер Modrinth: поиск с фильтрами по загрузчику, версии игры и категории, сортировка по загрузкам или дате, установка в один клик. Обязательные зависимости подтягиваются автоматически — например, при установке Create сам добавится Fabric API.
-
-Проверено на живых данных: 17 835 модов для Fabric 1.21.1, установка Create Fabric автоматически подтянула Fabric API.
-
-CurseForge не предоставляет открытого доступа к каталогу: его API требует ключ, выдаваемый по индивидуальной заявке, а сайт защищён от встраивания. Поэтому в лаунчере есть кнопка «CurseForge в браузере» — скачанные оттуда файлы добавляются кнопкой «Добавить файлы».
-
-**Язык интерфейса**
-
-Русский и английский, переключаются в настройках без перезапуска. При первом запуске язык определяется по системной локали.
-
-**Оформление**
-
-Логотип и иконка окна отрисовываются векторно и окрашиваются акцентом активной темы.
-
-Девять готовых тем: Emerald Dark, Midnight Ember, Noir Rose, Vault Gold, Abyss Frost, Crimson Chalk, ElectricPurple Cream, RoyalPurple Gold, DeepForest Flame.
-
-Режим «Свой цвет» открывает цветовой круг: выбираете акцент, остальные оттенки палитры рассчитываются автоматически с учётом читаемости текста. Тема применяется сразу, без перезапуска.
-
-Фоновое изображение задаётся путём к файлу (PNG, JPG, GIF). Регулируются размытие с настраиваемым радиусом, затемнение и плотность панелей. Анимированные GIF воспроизводятся; при включённом размытии показывается статичный первый кадр.
-
-Все настройки оформления сохраняются и применяются при следующем запуске.
+Точное требование берётся из манифеста версии; недостающие JRE скачиваются с Adoptium.
 
 **Прочее**
 
-- Слайдер выделения оперативной памяти с шагом 512 МБ и предупреждением о переизбытке
-- Менеджер модов: включение/отключение без удаления файлов
-- Консоль игры с подсветкой ошибок и предупреждений
-- Полная поддержка старых версий, включая 1.5.2 и ниже (legacy-ассеты, `${auth_session}`)
-- Проверка SHA-1 у всех скачанных файлов, параллельная загрузка
+- Быстрый вход на сервер (поле на вкладке «Играть») и кнопка **MargyCraft** — вход на `craft.narez.xyz` на свежей vanilla-версии в один клик.
+- Менеджер загрузок (пауза/возобновление/отмена, скорость, прогресс), докачка через HTTP Range, параллельные загрузки; повреждённые partial-файлы отбрасываются при несовпадении хеша.
+- Диагностика запусков (Java, память, зависимости, Mixin, OpenGL, архивы, сеть) с обезличенными отчётами; Repair с транзакциями и откатом; вкладка **Бэкапы** с восстановлением.
+- Девять тем, свой цвет, градиенты (включая Material You и 4 новых пресета), стили интерфейса **Обычный / Material You / Liquid Glass** — стекло подстраивается под тему; смена темы перекрашивает всё мгновенно.
+- Фон PNG/JPG/GIF с размытием и ограничением FPS анимации; окно без рамки можно перетаскивать и растягивать.
+- Прокси HTTP/SOCKS; проверка обновлений GitHub с установкой прямо из вкладки «О лаунчере» и тумблером автопроверки.
+- Русский и английский, переключение без перезапуска; все сервисные сообщения локализованы.
 
----
+## Сборка и запуск
 
-## Сборка
-
-Нужны **JDK 17 или новее** и **Maven 3.8+**.
+Нужны **JDK 17+** и **Maven 3.8+**.
 
 ```bash
 git clone <репозиторий>
 cd agro-launcher
 mvn clean package
+java -jar target/AgroLauncher.jar
 ```
 
-Готовый файл: `target/AgroLauncher.jar` (~2,5 МБ).
-
----
-
-## Запуск
-
-### Windows
-
-Двойной щелчок по `AgroLauncher.jar`, либо:
-
-```cmd
-javaw -jar AgroLauncher.jar
-```
-
-Готовый скрипт: `run.bat`
-
-### Linux
-
-```bash
-java -jar AgroLauncher.jar
-```
-
-Готовый скрипт: `run.sh` (сделайте исполняемым: `chmod +x run.sh`)
-
-### Аргументы командной строки
+Готовый файл: `target/AgroLauncher.jar` (~6 МБ).
 
 ```
 --help, -h                 справка
---version                  версия лаунчера
+--version                  версия
 --data-dir <путь>          свой каталог данных (портативный режим)
---dry-run <версия> [ник]   подготовить версию и показать команду запуска, не запуская игру
+--dry-run <версия> [ник]   подготовить версию и показать команду запуска
 ```
-
-Пример проверки конфигурации без запуска игры:
-
-```bash
-java -jar AgroLauncher.jar --dry-run 1.21.1 Steve
-```
-
----
-
-## Windows x64 EXE: кросс-сборка на Linux
-
-Профиль Maven создаёт Windows launcher через Launch4j прямо на Linux, скачивает фиксированный Eclipse Temurin JRE 17 для Windows x64 и кладёт его рядом. Установленная Java на компьютере пользователя не нужна.
-
-```bash
-cd /home/agrovdva/Загрузки/agro-launcher
-mvn clean verify -Pwindows-portable
-```
-
-Результаты:
-
-- переносимая папка: `target/AgroLauncher-Windows-x64/`
-- launcher: `target/AgroLauncher-Windows-x64/AgroLauncher.exe`
-- встроенная Java: `target/AgroLauncher-Windows-x64/runtime/bin/java.exe`
-- fat JAR: `target/AgroLauncher-Windows-x64/AgroLauncher.jar`
-- готовый архив: `target/AgroLauncher-Windows-x64-Portable.zip`
-
-Передавайте пользователю всю папку либо ZIP. Это не один самодостаточный EXE: `AgroLauncher.exe` использует соседние `AgroLauncher.jar` и `runtime/`. Профиль не использует `jpackage`, Windows или WiX.
-
-Обычная Linux/JAR-сборка остаётся доступна командой `mvn clean package`.
-
----
 
 ## Где хранятся файлы
 
@@ -209,50 +249,42 @@ mvn clean verify -Pwindows-portable
 | Linux | `~/.agrolauncher` (или `$XDG_DATA_HOME/agrolauncher`) |
 | macOS | `~/Library/Application Support/agrolauncher` |
 
-Структура каталога:
-
 ```
 .agrolauncher/
-├── minecraft/          игровые файлы (versions, libraries, assets, mods)
-├── runtimes/           автоматически скачанные JRE 8/17/21
-├── authlib/            authlib-injector.jar для Ely.by
-├── cache/installers/   установщики Forge, NeoForge, OptiFine
-├── cache/icons/        кэш иконок модов
-├── settings.json       настройки
-└── accounts.json       только несекретные метаданные аккаунтов
+├── minecraft/                 общие игровые файлы (versions, libraries, assets)
+├── instances/installations/   изолированные игровые папки по версиям
+├── mod-builds/                независимые мод-сборки
+├── backups/                   проверенные бэкапы
+├── runtimes/                  скачанные JRE
+├── authlib/                   authlib-injector.jar
+├── cache/                     метаданные, иконки, установщики, модпаки
+├── logs/                      журналы запусков
+├── transactions/              staging для Repair
+├── settings.json              настройки (доступ только владельцу)
+└── accounts.json              только несекретные метаданные аккаунтов
 ```
-
----
 
 ## Первый запуск
 
-1. Откройте **Аккаунты** → введите ник → «Добавить профиль». Либо войдите через Ely.by.
-2. Откройте **Версии** → выберите версию Minecraft и загрузчик модов.
-3. Откройте **Настройки** → «Общие» → выставьте объём оперативной памяти слайдером.
-4. При желании зайдите в **Настройки** → «Интерфейс»: язык, тема, свой цвет и фон.
-5. Вернитесь на **Играть** и нажмите «ИГРАТЬ».
+1. **Аккаунты** → ник → «Добавить профиль», либо вход через Ely.by.
+2. **Версии** → версия Minecraft и загрузчик.
+3. При желании **Моды** → «Модпаки» или «Импорт .mrpack» — модпак появится в **Инстансах** и выберется автоматически.
+4. **Настройки** → память, сеть (прокси), интерфейс (язык, тема, стиль, фон).
+5. **Играть** → «ИГРАТЬ». Загрузчик ставится автоматически при первом запуске связки.
 
-Загрузчик модов устанавливается автоматически при первом запуске выбранной связки.
+## Windows x64 EXE: кросс-сборка на Linux
 
-Моды устанавливаются на экране **Моды**: вкладка «Каталог» ищет их в Modrinth, вкладка «Установленные» управляет файлами. Отдельные вкладки «Ресурспаки» и «Шейдеры» используют типы Modrinth `resourcepack` и `shader`. Свои `.jar` можно добавить кнопкой или положить прямо в `minecraft/mods`.
+```bash
+mvn clean verify -Pwindows-portable
+```
 
-Токены аккаунтов хранятся в системном хранилище учётных данных; старые токены из `accounts.json` мигрируют при первом чтении, после чего JSON перезаписывается без секретов. Загрузки используют постоянный `.partial`, HTTP `Range`, до трёх попыток и линейный backoff.
+Результат: `target/AgroLauncher-Windows-x64/` (`AgroLauncher.exe` + `AgroLauncher.jar` + `runtime/`) и архив `AgroLauncher-Windows-x64-Portable.zip`. Это не один самодостаточный EXE: он использует соседние JAR и рантайм. Профиль не использует `jpackage`, Windows и WiX.
 
-Обновления проверяются по `githubRepository` в `settings.json`. Для запуска из исполняемого JAR лаунчер выбирает подходящий JAR-артефакт релиза, проверяет SHA-256 при наличии `.sha256`/`SHA256SUMS`, подготавливает замену рядом с текущим файлом и перезапускается с резервной копией и откатом. Запуск из IDE и неподходящие релизы безопасно переводятся на страницу релиза. Windows portable обновляет соседний `AgroLauncher.jar`; EXE и встроенная JRE не заменяются автоматически.
-
-Данные предыдущей версии лаунчера (каталог `.emeraldlauncher`) переносятся автоматически при первом запуске.
-
----
+Данные предыдущего поколения лаунчера (`.emeraldlauncher`) переносятся автоматически.
 
 ## Важное ограничение
 
-Лаунчер работает **только с серверами, у которых `online-mode=false`** (так называемые offline- или пиратские серверы).
-
-Оффлайн-профиль не проходит проверку лицензии Mojang и не может подключаться к официальным серверам. Лаунчер не обходит платную авторизацию Mojang/Microsoft: он лишь генерирует локальный UUID, как это делает сам сервер в режиме `online-mode=false`.
-
-Для игры со скинами и на серверах, поддерживающих сторонние сервисы аккаунтов, используйте **Ely.by** — это легальный сторонний провайдер.
-
----
+Лаунчер работает **только с серверами `online-mode=false`**. Оффлайн-профиль не проходит проверку лицензии Mojang; лаунчер не обходит платную авторизацию — он лишь генерирует локальный UUID, как это делает сам сервер. Для скинов и сторонних сервисов аккаунтов используйте **Ely.by**.
 
 ## Архитектура
 
@@ -260,45 +292,50 @@ mvn clean verify -Pwindows-portable
 by.agro.launcher
 ├── Main                    точка входа, режимы CLI
 ├── LauncherContext         общий контекст сервисов
-├── core/                   платформа, пути, настройки, загрузчик, JSON, хеши
+├── core/                   платформа, пути, настройки, загрузчик (HTTPS
+│                           с защитой от DNS-rebinding, докачка, кэш проверок)
 ├── version/                манифесты Mojang, правила библиотек, наследование
 │                           версий, ассеты, нативные библиотеки
 ├── loaders/                установщики Fabric, Quilt, Forge, NeoForge, OptiFine
-├── auth/                   оффлайн-профили, Ely.by, authlib-injector, хранилище
+├── auth/                   оффлайн, Ely.by, OAuth (только ely.by),
+│                           authlib-injector, системные хранилища
 ├── jvm/                    определение и скачивание Java, распаковка архивов
-├── launch/                 сборка команды запуска, процесс игры
-├── modrinth/               клиент каталога, установщик модов, кэш иконок
-├── i18n/                   тексты интерфейса на двух языках
-├── mods/                   управление файлами модов
-└── ui/                     темы и палитры, фон с размытием, окно, экраны
+├── launch/                 сборка команды запуска, процесс, preflight
+├── modrinth/               клиент каталога, установщик модов, модпаки
+│                           (.mrpack импорт/экспорт), кэш иконок
+├── mods/                   управление модами, мод-сборки
+├── integrity/              манифесты установки (SHA-256, provenance)
+├── repair/                 транзакции восстановления с откатом
+├── backup/                 проверенные бэкапы с восстановлением
+├── cleanup/                планы очистки
+├── diagnostics/            сессии запуска, анализ логов, редактирование
+├── offline/                политика оффлайн-режима
+├── update/                 проверки GitHub, самообновление
+├── i18n/                   тексты RU/EN (с кэшем MessageFormat)
+└── ui/                     темы и палитры, стили интерфейса, фон с размытием,
+                            окно, экраны, инстансы и бэкапы
 ```
 
 **Ключевые технические решения**
 
-- **Наследование версий.** Профили загрузчиков ссылаются на ванильную версию через `inheritsFrom`. Резолвер склеивает цепочку, при этом дедупликация библиотек выполняется только между версиями цепочки — внутри одного манифеста несколько версий одной библиотеки с разными правилами ОС сохраняются (иначе на Linux и Windows теряется LWJGL в версиях 1.7–1.12).
-- **Проверка ванильного клиента перед установкой Forge.** Установщик Forge патчит клиентский jar и сверяет результат с хешами, зашитыми в `install_profile.json`, но сам исходный файл не проверяет: найдя jar на месте, берёт его как есть. Один изменённый байт — и установка падает с «Processor failed, invalid outputs», причём повторные попытки бесполезны. Поэтому лаунчер сверяет `versions/{mc}/{mc}.jar` с суммой Mojang и при расхождении скачивает заново; если хеши промежуточных файлов всё же не совпали, он чистит их и повторяет установку один раз.
-- **Placeholder'ы Forge.** Помимо стандартных подстановок Mojang обрабатываются `${library_directory}`, `${classpath_separator}` и `${version_name}`, которые есть только в профилях Forge и NeoForge.
-- **Три формата аргументов.** Поддерживаются `arguments` (1.13+), `minecraftArguments` (1.7–1.12) и pre-1.6 схема с `${auth_session}` и ресурсами в `game_dir/resources`.
-- **Собственный распаковщик tar.gz** для архивов JRE — без внешних зависимостей, с поддержкой симлинков и защитой от path traversal.
-- **Динамические палитры.** Цвета не зашиты константами, а выводятся из пары «фон + акцент» в пространстве HSB. Цвет текста поверх акцента выбирается по относительной яркости, поэтому светлые темы вроде Vault Gold остаются читаемыми.
-- **Размытие фона** раскладывает гауссово ядро на два одномерных прохода: сложность падает с O(w·h·r²) до O(w·h·r), а результат кэшируется до изменения размера окна или радиуса.
-- **Логотип** строится по золотому сечению: три квадрата со стороной в отношении 1 : 1/φ : 1/φ², каждый стоит на углу предыдущего, композиция точно заполняет квадратную канву. Векторная отрисовка позволяет держать один источник для панели, заголовка окна и панели задач, окрашивая его под тему.
-- **Иконки навигации** рисуются средствами Java2D, а не берутся из шрифта: символы Unicode отображаются по-разному в зависимости от системы, а на многих сборках Linux вовсе показываются пустыми прямоугольниками.
-- **Локализация** хранится в коде, а не в файлах ресурсов — строки попадают в JAR без дополнительной сборки. При смене языка экраны пересобираются целиком: это надёжнее обхода дерева компонентов с подменой подписей.
-
----
+- **Наследование версий** с дедупликацией библиотек только между манифестами цепочки (иначе теряется LWJGL в 1.7–1.12).
+- **Проверка ванильного клиента перед установкой Forge** и один повтор после очистки при несовпадении промежуточных хешей.
+- **Три формата аргументов**: `arguments`, `minecraftArguments` и pre-1.6.
+- **Собственный распаковщик tar.gz** с защитой от path traversal.
+- **Кэш проверок**: хеш успешно проверенного файла не пересчитывается при повторных запусках; большие проверки идут параллельно.
+- **Живая смена темы**: цвета (включая производные акценты и рамки) мигрируют по всему дереву компонентов при смене темы и градиента.
+- **Liquid Glass** кэширует отрисовку и пересобирает её только при изменении размера/темы/прозрачности; при ресайзе окна — упрощённый режим.
+- **Безопасность**: только HTTPS с проверенными адресами, OAuth только на ely.by, лимиты против zip-бомб, лимиты размеров ответов, права «только владелец» для настроек и аккаунтов, нейтрализация HTML в удалённых строках.
+- **Локализация в коде**; при смене языка экраны пересобираются целиком.
 
 ## Зависимости
 
-- [FlatLaf](https://www.formdev.com/flatlaf/) 3.7.2 — современный внешний вид Swing
-- [Gson](https://github.com/google/gson) 2.14.0 — работа с JSON
+- [FlatLaf](https://www.formdev.com/flatlaf/) 3.6 — современный внешний вид Swing
+- [Gson](https://github.com/google/gson) 2.11.0 — работа с JSON
+- [JNA](https://github.com/java-native-access/jna) 5.16 — Windows Credential Manager, macOS Keychain, определение памяти
 
-Каталог модов работает через открытый [API Modrinth](https://docs.modrinth.com/) — ключ не требуется.
-
-Обе библиотеки встроены в итоговый JAR.
-
----
+Каталог модов работает через открытый [API Modrinth](https://docs.modrinth.com/) — ключ не требуется. Всё встроено в итоговый JAR.
 
 ## Лицензия
 
-Код предоставлен как есть. Minecraft — торговая марка Mojang AB; лаунчер не связан с Mojang и Microsoft.
+Код предоставляется как есть. Minecraft — торговая марка Mojang AB; лаунчер не связан с Mojang и Microsoft.

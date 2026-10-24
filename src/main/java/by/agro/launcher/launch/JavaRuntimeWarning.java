@@ -11,9 +11,6 @@ final class JavaRuntimeWarning {
                 || selection.detectedMajor == selection.requiredMajor) {
             return null;
         }
-        return "ПРЕДУПРЕЖДЕНИЕ: для выбранной версии Minecraft/Forge требуется Java "
-                + selection.requiredMajor + ", но выбран пользовательский runtime Java "
-                + selection.detectedMajor
-                + ". Custom runtime может вызвать ошибку запуска; запуск будет продолжен.";
+        return by.agro.launcher.i18n.Strings.get("launch.customJavaWarning", selection.requiredMajor, selection.detectedMajor);
     }
 }

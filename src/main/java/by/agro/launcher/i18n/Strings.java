@@ -84,6 +84,9 @@ public final class Strings {
         put("play.account", "Аккаунт", "Account");
         put("play.memory", "Память", "Memory");
         put("play.button", "ИГРАТЬ", "PLAY");
+        put("play.quickServer", "Быстрый вход на сервер", "Quick server join");
+        put("play.quickServerAddressMissing", "Адрес сервера MargyCraft пока не задан",
+                "The MargyCraft server address is not configured yet");
         put("play.stop", "Остановить игру", "Stop game");
         put("play.console", "Консоль", "Console");
         put("console.launcherPrefix", "[Лаунчер]", "[Launcher]");
@@ -470,6 +473,13 @@ public final class Strings {
         put("appearance.language", "Язык интерфейса", "Interface language");
         put("appearance.languageHint", "Изменения применяются сразу", "Changes apply immediately");
         put("appearance.languageChanged", "Язык интерфейса: {0}", "Interface language: {0}");
+        put("appearance.interfaceStyle", "Стиль интерфейса", "Interface style");
+        put("appearance.materialYou", "Material You", "Material You");
+        put("appearance.materialYouHint", "Увеличенные скругления, pill-элементы, карточки и более свободные отступы",
+                "Larger corners, pill controls, cards and roomier spacing");
+        put("appearance.materialYouChanged", "Стиль Material You: {0}", "Material You style: {0}");
+        put("appearance.enabled", "включён", "enabled");
+        put("appearance.disabled", "выключен", "disabled");
         put("appearance.theme", "Цветовая тема", "Color theme");
         put("appearance.themeSelected", "Тема: {0}", "Theme: {0}");
         put("appearance.customColor", "Свой акцентный цвет", "Custom accent color");
@@ -484,15 +494,33 @@ public final class Strings {
         put("appearance.gradientNone", "Без градиента", "No gradient");
         put("appearance.gradientBlazingFlame", "Пылающее пламя", "Blazing Flame");
         put("appearance.gradientDeepSea", "Глубокое море", "Deep Sea");
+        put("appearance.gradientMaterialYou", "Material You", "Material You");
         put("appearance.gradientRainbow", "Радуга", "Rainbow");
         put("appearance.gradientMonochrome", "Монохром", "Monochrome");
+        put("appearance.gradientAgedWine", "Состаренно винный", "Aged Wine");
+        put("appearance.gradientMojito", "Мохито", "Mojito");
+        put("appearance.gradientNeon", "Неон", "Neon");
+        put("appearance.gradientStylishOrange", "Стильный оранжевый", "Stylish Orange");
+        put("appearance.gradientAncient", "Древний", "Ancient");
         put("appearance.gradientCustom", "Свой градиент", "Custom gradient");
         put("appearance.gradientSelected", "Выбран градиент: {0}", "Gradient selected: {0}");
         put("gradient.none.desc", "Обычная тема без градиента", "Regular theme without a gradient");
         put("gradient.blazingFlame.desc", "Красный, оранжевый и золотой", "Red, orange and gold");
         put("gradient.deepSea.desc", "Глубокий синий и бирюзовый", "Deep blue and cyan");
+        put("gradient.materialYou.desc", "Светло-фиолетовый → более светлый фиолетовый",
+                "Light purple → lighter purple");
         put("gradient.rainbow.desc", "Яркий многоцветный спектр", "Bright multicolor spectrum");
         put("gradient.monochrome.desc", "Графитовый и серебристый", "Graphite and silver");
+        put("gradient.agedWine.desc", "Винный, состаренное золото и глубокий чёрный",
+                "Wine, aged gold and deep black");
+        put("gradient.mojito.desc", "Мягкий лайм, лесная зелень и фиолетовый",
+                "Soft lime, forest green and purple");
+        put("gradient.neon.desc", "Неоновая бирюза, розовый и тёмный фон",
+                "Neon cyan, pink and a dark background");
+        put("gradient.stylishOrange.desc", "Тёплый кремовый, яркий оранжевый и графит",
+                "Warm cream, vivid orange and graphite");
+        put("gradient.ancient.desc", "Старое золото, глубокая бирюза и слоновая кость",
+                "Old gold, deep teal and ivory");
         put("gradient.custom.desc", "Задайте собственные цвета", "Choose your own colors");
         put("appearance.wheelHint", "Кликните по кругу или введите код",
                 "Click the wheel or enter a hex code");
@@ -559,6 +587,211 @@ public final class Strings {
         put("progress.patchingOptifine", "Патчинг OptiFine", "Patching OptiFine");
         put("progress.classesProcessed", "классов обработано: {0}", "classes processed: {0}");
         put("progress.allDownloaded", "всё уже загружено", "everything already downloaded");
+
+        put("launch.command", "Запуск: {0}", "Launching: {0}");
+        put("launch.javaSelected", "Требуется Java {0}, выбрана Java {1} ({2})",
+                "Java {0} required, using Java {1} ({2})");
+        put("launch.ramRecommended", "Рекомендуемая память: {0}–{1} МБ", "Recommended RAM: {0}–{1} MB");
+        put("launch.customJavaWarning",
+                "ПРЕДУПРЕЖДЕНИЕ: для выбранной версии Minecraft/Forge требуется Java {0}, но выбран пользовательский runtime Java {1}. Custom runtime может вызвать ошибку запуска; запуск будет продолжен.",
+                "WARNING: this Minecraft/Forge version requires Java {0}, but a custom Java {1} runtime is selected. A custom runtime may fail to start the game; launching anyway.");
+
+        put("auth.oauthExpired", "Сессия Ely.by OAuth истекла; войдите заново",
+                "The Ely.by OAuth session has expired; sign in again");
+
+        put("jre.stageSearch", "поиск сборки", "looking up a build");
+        put("jre.stageDownload", "загрузка {0}", "downloading {0}");
+        put("jre.stageExtract", "распаковка", "extracting");
+        put("jre.stageDone", "готово", "done");
+        put("jre.installed", "Java {0} установлена: {1}", "Java {0} installed: {1}");
+        put("jre.sourceSystem", "система", "system");
+        put("jre.sourceManaged", "встроенная", "bundled");
+
+        put("authlib.updateFailed", "Не удалось проверить обновление authlib-injector, используется локальная копия",
+                "Could not check for authlib-injector updates; using the local copy");
+        put("authlib.downloading", "загрузка {0}", "downloading {0}");
+        put("authlib.ready", "authlib-injector {0} готов", "authlib-injector {0} is ready");
+
+        put("loader.installSummary", "{0} {1} для Minecraft {2}", "{0} {1} for Minecraft {2}");
+        put("loader.stageInstalling", "Установка {0}", "Installing {0}");
+        put("loader.stageProfile", "получение профиля", "fetching the profile");
+        put("loader.profileSaved", "Профиль сохранён: {0}", "Profile saved: {0}");
+        put("loader.installed", "{0} установлен: {1}", "{0} installed: {1}");
+        put("loader.stageDownload", "загрузка {0}", "downloading {0}");
+        put("loader.filesProcessed", "файлов обработано: {0}", "files processed: {0}");
+
+        put("forge.installNotRequired", "Установка не требуется: проверен профиль {0}",
+                "Installation is not required: profile {0} verified");
+        put("forge.installRequired", "Установка требуется: marker отсутствует или профиль неполон",
+                "Installation is required: the marker is missing or the profile is incomplete");
+        put("forge.forceReinstall", "Принудительная переустановка запрошена Repair",
+                "Forced reinstallation requested by Repair");
+        put("forge.stageTitle", "Установка {0}", "Installing {0}");
+        put("forge.stageDownloadInstaller", "загрузка установщика", "downloading the installer");
+        put("forge.stageRunInstaller", "запуск установщика", "running the installer");
+        put("forge.stageFindProfile", "поиск профиля", "locating the profile");
+        put("forge.processorRetry", "Промежуточные файлы не совпали с эталоном — очищаем и повторяем",
+                "Intermediate files failed verification; cleaning up and retrying");
+        put("forge.profileVerified", "Профиль установлен и проверен: {0}", "Profile installed and verified: {0}");
+        put("forge.profileSelected", "Generated profile выбран: {0}", "Generated profile selected: {0}");
+        put("forge.markerInvalid", "Marker установки недействителен: {0}", "Installation marker is invalid: {0}");
+        put("forge.checkingVanilla", "Проверка ванильного клиента", "Verifying the vanilla client");
+        put("forge.vanillaCheckSkipped", "Список версий недоступен — проверка ванильного клиента пропущена",
+                "Version manifest unavailable; skipping the vanilla client check");
+        put("forge.vanillaBroken", "Ванильный {0}.jar повреждён или изменён — скачиваем заново",
+                "The vanilla {0}.jar is corrupted or modified; re-downloading");
+        put("forge.vanillaRestored", "файл восстановлен", "file restored");
+        put("forge.vanillaOk", "файл в порядке", "file is fine");
+        put("forge.cleanupFailed", "Не удалось очистить промежуточные файлы: {0}",
+                "Could not clean intermediate files: {0}");
+        put("forge.cleanupRemoved", "Удалено промежуточных файлов: {0}", "Removed intermediate files: {0}");
+        put("forge.patching", "Патчинг клиента", "Patching the client");
+
+        put("optifine.stageTitle", "Установка OptiFine", "Installing OptiFine");
+        put("optifine.stagePatch", "патчинг клиента", "patching the client");
+        put("optifine.stageLaunchwrapper", "извлечение launchwrapper", "extracting launchwrapper");
+        put("optifine.stageProfile", "создание профиля", "creating the profile");
+        put("optifine.patching", "Патчинг OptiFine", "Patching OptiFine");
+        put("optifine.launchwrapperExtracted", "launchwrapper извлечён: {0}", "launchwrapper extracted: {0}");
+        put("optifine.launchwrapperFallback",
+                "Собственный launchwrapper не найден, используется net.minecraft:launchwrapper:1.12",
+                "No bundled launchwrapper found; using net.minecraft:launchwrapper:1.12");
+        put("optifine.addedToMods", "OptiFine добавлен в mods: {0}", "OptiFine copied into mods: {0}");
+
+        put("natives.missingSkip", "Нативная библиотека не найдена, пропуск: {0}",
+                "Native library not found, skipping: {0}");
+        put("resolver.downloadingVersion", "Загрузка описания версии {0}", "Downloading version metadata {0}");
+        put("assets.noIndex", "У версии нет индекса ассетов — пропускаем",
+                "The version has no asset index; skipping");
+
+        put("install.noFile", "{0} (нет файла для загрузки)", "{0} (no file to download)");
+        put("install.depNoVersion", "зависимость {0} (нет подходящей версии)",
+                "dependency {0} (no matching version)");
+        put("install.depError", "зависимость {0}: {1}", "dependency {0}: {1}");
+
+        put("browser.untitled", "Без названия", "Untitled");
+        put("unit.million", "млн", "M");
+        put("unit.thousand", "тыс.", "K");
+
+        put("diag.JAVA_MISMATCH.title", "Несовместимая версия Java", "Incompatible Java version");
+        put("diag.JAVA_MISMATCH.advice", "Выберите Java, требуемую этой версией Minecraft/loader.",
+                "Select the Java version required by this Minecraft/loader version.");
+        put("diag.OUT_OF_MEMORY.title", "Недостаточно памяти Java", "Not enough Java memory");
+        put("diag.OUT_OF_MEMORY.advice", "Увеличьте RAM или уменьшите число модов/ресурспаков.",
+                "Increase RAM or reduce the number of mods/resource packs.");
+        put("diag.MISSING_CLASS.title", "Отсутствует класс или модуль", "Missing class or module");
+        put("diag.MISSING_CLASS.advice", "Проверьте библиотеки, loader и совместимость модов.",
+                "Check libraries, the loader and mod compatibility.");
+        put("diag.MOD_DEPENDENCY.title", "Не выполнена зависимость мода", "Mod dependency not satisfied");
+        put("diag.MOD_DEPENDENCY.advice", "Установите требуемую версию зависимости или удалите несовместимый мод.",
+                "Install the required dependency version or remove the incompatible mod.");
+        put("diag.MIXIN_FAILURE.title", "Ошибка Mixin", "Mixin failure");
+        put("diag.MIXIN_FAILURE.advice", "Проверьте совместимость модов и версий loader.",
+                "Check mod and loader version compatibility.");
+        put("diag.NATIVE_OPENGL.title", "Ошибка native/OpenGL", "Native/OpenGL failure");
+        put("diag.NATIVE_OPENGL.advice", "Обновите видеодрайвер и проверьте архитектуру Java/native-библиотек.",
+                "Update the video driver and check the Java/native library architecture.");
+        put("diag.CORRUPT_ARCHIVE.title", "Повреждён JAR/ZIP", "Corrupted JAR/ZIP");
+        put("diag.CORRUPT_ARCHIVE.advice", "Повторно загрузите повреждённый файл или выполните восстановление.",
+                "Re-download the corrupted file or run a repair.");
+        put("diag.AUTH_NETWORK.title", "Ошибка авторизации или сети", "Authentication or network failure");
+        put("diag.AUTH_NETWORK.advice", "Проверьте подключение, время системы и повторите вход.",
+                "Check the connection and system clock, then sign in again.");
+        put("diag.implicatedMods", "Моды", "Mods");
+
+        put("update.checking", "Проверка обновлений…", "Checking for updates…");
+        put("update.latest", "У вас установлена последняя версия", "You are running the latest version");
+        put("about.updates", "Обновления", "Updates");
+        put("about.checkUpdates", "Проверить обновления", "Check for updates");
+        put("about.autoCheck", "проверять при запуске", "check on startup");
+
+        put("nav.instances", "Инстансы", "Instances");
+        put("instances.title", "Инстансы", "Instances");
+        put("instances.subtitle", "Установленные копии игры и независимые мод-сборки",
+                "Installed game copies and independent mod builds");
+        put("instances.installations", "Установки", "Installations");
+        put("instances.builds", "Мод-сборки", "Mod builds");
+        put("instances.play", "Играть", "Play");
+        put("instances.selected", "Выбрано: {0}", "Selected: {0}");
+        put("instances.deleteConfirm", "Удалить игровую директорию «{0}»? Моды и миры этой установки будут удалены безвозвратно.",
+                "Delete the game directory of \"{0}\"? Mods and worlds of this installation will be removed permanently.");
+        put("instances.deleted", "Установка удалена: {0}", "Installation deleted: {0}");
+        put("instances.empty", "Установок пока нет: запустите игру или импортируйте модпак — они появятся здесь",
+                "No installations yet: launch the game or import a modpack and they will appear here");
+        put("instances.summary", "Установок: {0}", "Installations: {0}");
+
+        put("mods.modpacks", "Модпаки", "Modpacks");
+        put("mods.exportMrpack", "Экспорт .mrpack", "Export .mrpack");
+        put("mods.exportMrpackTooltip", "Собрать текущую установку в файл Modrinth-модпака",
+                "Bundle the current installation into a Modrinth modpack file");
+        put("browser.searchPlaceholder.modpack", "Поиск модпаков: Fabulously Optimized и т. д.",
+                "Search modpacks: Fabulously Optimized, etc.");
+        put("modpack.installed", "Модпак «{0}» установлен для Minecraft {1}",
+                "Modpack \"{0}\" installed for Minecraft {1}");
+        put("modpack.namePrompt", "Название модпака:", "Modpack name:");
+        put("modpack.exporting", "Экспорт модпака…", "Exporting the modpack…");
+        put("modpack.exported", "Модпак сохранён: {0}", "Modpack saved: {0}");
+
+        put("settings.network", "Сеть", "Network");
+        put("settings.proxyMode", "Прокси", "Proxy");
+        put("settings.proxyPort", "Порт", "Port");
+        put("settings.proxyRestartHint", "применяется сразу к новым загрузкам", "applies to new downloads immediately");
+
+        put("settings.backups", "Бэкапы", "Backups");
+        put("backups.hint", "Бэкапы создаются автоматически перед восстановлением установки; восстановление затрагивает сохранения, настройки и моды текущей выбранной установки.",
+                "Backups are created automatically before repairing an installation; restoring affects saves, settings and mods of the currently selected installation.");
+        put("backups.empty", "Бэкапов пока нет", "No backups yet");
+        put("backups.summary", "Бэкапов: {0}", "Backups: {0}");
+        put("backups.restore", "Восстановить", "Restore");
+        put("backups.restoring", "Восстановление {0}…", "Restoring {0}…");
+        put("backups.restored", "Восстановлено в {0}", "Restored into {0}");
+        put("backups.restoreFailed", "Не удалось восстановить бэкап: {0}", "Failed to restore the backup: {0}");
+        put("backups.restoreConfirm", "Восстановить бэкап {0} в {1}? Текущие файлы будут заменены.",
+                "Restore backup {0} into {1}? Current files will be replaced.");
+        put("backups.entryDetail", "{0} · файлов: {1}", "{0} · files: {1}");
+
+        put("about.linksCaption", "Ссылки", "Links");
+        put("about.margycraftSubtitle", "Сервер от Narezany", "Server by Narezany");
+        put("about.creatorLabel", "Создатель", "Creator");
+        put("about.techLine", "Собрано на FlatLaf · Gson · JNA · Modrinth API",
+                "Built with FlatLaf · Gson · JNA · Modrinth API");
+
+        put("appearance.style.standard", "Обычный", "Default");
+        put("appearance.style.standard.hint", "Классические панели и скругления",
+                "Classic panels and corners");
+        put("appearance.style.materialYou", "Material You", "Material You");
+        put("appearance.style.materialYou.hint",
+                "Увеличенные скругления, pill-элементы, карточки и более свободные отступы",
+                "Larger corners, pill controls, cards and roomier spacing");
+        put("appearance.style.liquidGlass", "Liquid Glass", "Liquid Glass");
+        put("appearance.style.liquidGlass.hint",
+                "Полупрозрачное стекло с бликом и мягкими краями",
+                "Translucent glass with a highlight and soft edges");
+        put("appearance.styleChanged", "Стиль интерфейса: {0}", "Interface style: {0}");
+
+        put("mods.addFilesFilter", "Моды (.jar) и модпаки (.mrpack)", "Mods (.jar) and modpacks (.mrpack)");
+        put("mods.importMrpack", "Импорт .mrpack", "Import .mrpack");
+        put("mods.importMrpackTooltip", "Установить файл Modrinth-модпака отдельной установкой",
+                "Install a Modrinth modpack file as a separate installation");
+        put("modpack.importedWithDir", "Модпак «{0}» установлен и выбран. Каталог установки:{1}",
+                "Modpack \"{0}\" installed and selected. Installation directory:{1}");
+        put("mods.installedInto", "Установка в: {0}", "Installing into: {0}");
+        put("mods.mrpackInMods", "В папке модов лежит модпак {0} — игра его не загрузит. Импортируйте его кнопкой «Импорт .mrpack»",
+                "The mods folder contains the modpack {0} — the game will not load it. Import it with the \"Import .mrpack\" button");
+        put("mods.unpackMrpack", "Распаковать .mrpack", "Unpack .mrpack");
+        put("modpack.importFailed", "Не удалось импортировать модпак: {0}",
+                "Failed to import the modpack: {0}");
+        put("modpack.exportFailed", "Не удалось экспортировать модпак: {0}",
+                "Failed to export the modpack: {0}");
+        put("mods.modpackBadge", "модпак", "modpack");
+        put("mods.modsElsewhere", "В текущей установке модов нет — они установлены в: {0}",
+                "The current installation has no mods — they are installed in: {0}");
+        put("mods.switchTo", "Переключиться", "Switch");
+        put("mods.switchToTooltip", "Сделать установку с модами текущей",
+                "Make the installation with mods the current one");
+        put("instances.buildsEmpty",
+                "Мод-сборки создаются на экране «Моды» → «Установленные» кнопкой «Создать снимок»",
+                "Mod builds are created on the Mods → Installed screen with the \"Create snapshot\" button");
     }
 
     private Strings() {
@@ -578,6 +811,7 @@ public final class Strings {
             return;
         }
         current = language;
+        FORMAT_CACHE.clear();
         for (Runnable listener : new ArrayList<>(listeners)) {
             try {
                 listener.run();
@@ -612,9 +846,20 @@ public final class Strings {
             return pattern;
         }
         try {
-            return new MessageFormat(pattern, current.locale()).format(args);
+            MessageFormat template = FORMAT_CACHE.get(key);
+            if (template == null) {
+                template = new MessageFormat(pattern, current.locale());
+                MessageFormat existing = FORMAT_CACHE.putIfAbsent(key, template);
+                if (existing != null) {
+                    template = existing;
+                }
+            }
+            return ((MessageFormat) template.clone()).format(args);
         } catch (IllegalArgumentException e) {
             return pattern;
         }
     }
+
+    private static final java.util.Map<String, MessageFormat> FORMAT_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>();
 }

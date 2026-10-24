@@ -25,6 +25,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
+import javax.swing.ImageIcon;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -35,10 +36,16 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Image;
+import java.net.URL;
 import java.util.List;
 import java.util.function.Consumer;
 
 public final class PlayPanel extends JPanel {
+
+    private static final String MARGYCRAFT_SERVER_ADDRESS = "craft.narez.xyz";
+    private static final String MARGYCRAFT_VERSION = "26.3";
+    private static final String MARGYCRAFT_ICON_RESOURCE = "/margycrafticon.png";
 
     private final LauncherContext context;
     private final Consumer<String> statusReporter;
@@ -48,9 +55,11 @@ public final class PlayPanel extends JPanel {
     private final JLabel ramLabel = new JLabel();
     private final JLabel loaderLabel = new JLabel();
     private final JButton playButton = UiFactory.primaryButton(Strings.get("play.button"));
+    private final JButton margyCraftButton = UiFactory.primaryButton("MargyCraft");
     private final JButton repairButton = UiFactory.primaryButton(Strings.get("repair.button"));
     private final JButton stopButton = UiFactory.dangerButton(Strings.get("play.stop"));
     private final JButton exportButton = UiFactory.linkButton(Strings.get("play.exportAnalysis"));
+    private final javax.swing.JTextField quickServerField = new javax.swing.JTextField();
     private final JProgressBar progressBar = new JProgressBar();
     private final JLabel progressLabel = new JLabel(" ");
     private final GameConsole console = new GameConsole();
@@ -139,7 +148,13 @@ public final class PlayPanel extends JPanel {
 
         playButton.setPreferredSize(new Dimension(210, 52));
         playButton.setFont(AgroTheme.boldFont(17));
-        playButton.addActionListener(e -> launchGame());
+        playButton.addActionListener(e -> launchGame(quickServerAddress()));
+
+        margyCraftButton.setPreferredSize(new Dimension(190, 52));
+        margyCraftButton.setToolTipText("Vanilla · " + (MARGYCRAFT_SERVER_ADDRESS.isBlank()
+                ? Strings.get("play.quickServerAddressMissing") : MARGYCRAFT_SERVER_ADDRESS));
+        configureMargyCraftIcon();
+        margyCraftButton.addActionListener(e -> launchMargyCraft());
 
         repairButton.setPreferredSize(new Dimension(190, 52));
         repairButton.addActionListener(e -> repairInstallation());
@@ -150,6 +165,7 @@ public final class PlayPanel extends JPanel {
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         buttons.setOpaque(false);
         buttons.add(playButton);
+        buttons.add(margyCraftButton);
         buttons.add(repairButton);
         buttons.add(stopButton);
 
@@ -167,10 +183,37 @@ public final class PlayPanel extends JPanel {
         progressArea.add(progressLabel);
         progressArea.add(UiFactory.verticalGap(6));
         progressArea.add(progressBar);
+        progressArea.add(UiFactory.verticalGap(8));
+
+        JPanel serverRow = new JPanel(new BorderLayout(8, 0));
+        serverRow.setOpaque(false);
+        serverRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        quickServerField.putClientProperty("JTextField.placeholderText", "play.example.com");
+        quickServerField.setToolTipText(Strings.get("play.quickServer"));
+        quickServerField.addActionListener(e -> saveQuickServerAddress());
+        quickServerField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                saveQuickServerAddress();
+            }
+        });
+        serverRow.add(UiFactory.hint(Strings.get("play.quickServer")), BorderLayout.WEST);
+        serverRow.add(quickServerField, BorderLayout.CENTER);
+        progressArea.add(serverRow);
 
         card.add(buttons, BorderLayout.WEST);
         card.add(progressArea, BorderLayout.CENTER);
         return card;
+    }
+
+    private String quickServerAddress() {
+        String value = quickServerField.getText();
+        return value == null ? "" : value.trim();
+    }
+
+    private void saveQuickServerAddress() {
+        context.settings().quickPlayServer = quickServerAddress();
+        context.settings().save();
     }
 
     private JComponent buildConsoleSection() {
@@ -258,6 +301,8 @@ public final class PlayPanel extends JPanel {
             }
 
             ramLabel.setText(SystemInfo.formatMb(context.settings().maxRamMb));
+            quickServerField.setText(context.settings().quickPlayServer == null
+                    ? "" : context.settings().quickPlayServer);
 
             boolean versionReady = version != null && !version.isBlank();
             playButton.setEnabled(versionReady && account != null && runningProcess == null);
@@ -274,27 +319,74 @@ public final class PlayPanel extends JPanel {
         return all.isEmpty() ? null : all.get(0);
     }
 
-    private void launchGame() {
+    private void configureMargyCraftIcon() {
+        URL iconUrl = PlayPanel.class.getResource(MARGYCRAFT_ICON_RESOURCE);
+        if (iconUrl == null) {
+            return;
+        }
+        ImageIcon source = new ImageIcon(iconUrl);
+        if (source.getIconWidth() <= 0 || source.getIconHeight() <= 0) {
+            return;
+        }
+        int maxWidth = 28;
+        int maxHeight = 28;
+        double scale = Math.min((double) maxWidth / source.getIconWidth(),
+                (double) maxHeight / source.getIconHeight());
+        int width = Math.max(1, (int) Math.round(source.getIconWidth() * scale));
+        int height = Math.max(1, (int) Math.round(source.getIconHeight() * scale));
+        Image scaled = source.getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH);
+        margyCraftButton.setIcon(new ImageIcon(scaled));
+        margyCraftButton.setIconTextGap(8);
+    }
+
+    private void launchMargyCraft() {
+        launchGame(MARGYCRAFT_SERVER_ADDRESS, null, LoaderType.VANILLA, true);
+    }
+
+    private String resolveLatestRelease() {
+        try {
+            by.agro.launcher.version.VersionManifest manifest = context.manifestIfLoaded() != null
+                    ? context.manifestIfLoaded() : context.manifest();
+            String latest = manifest.latestRelease();
+            if (latest != null && !latest.isBlank()) {
+                return latest;
+            }
+        } catch (Exception ignored) {
+        }
+        return MARGYCRAFT_VERSION;
+    }
+
+    private void launchGame(String quickPlayServer) {
+        launchGame(quickPlayServer, context.settings().selectedVersion,
+                LoaderType.fromId(context.settings().selectedLoader), false);
+    }
+
+    private void launchGame(String quickPlayServer, String mcVersion, LoaderType loaderType,
+                            boolean forceVanillaDirectory) {
         Account account = activeAccount();
-        String mcVersion = context.settings().selectedVersion;
-        LoaderType loaderType = LoaderType.fromId(context.settings().selectedLoader);
 
         if (account == null) {
             report(Strings.get("play.needAccount"));
             console.appendLauncherMessage(Strings.get("play.needAccount"));
             return;
         }
+        boolean resolveVersionDynamically = mcVersion == null;
         if (mcVersion == null || mcVersion.isBlank()) {
-            report(Strings.get("play.needVersion"));
-            console.appendLauncherMessage(Strings.get("play.needVersion"));
-            return;
+            if (!resolveVersionDynamically) {
+                report(Strings.get("play.needVersion"));
+                console.appendLauncherMessage(Strings.get("play.needVersion"));
+                return;
+            }
+            mcVersion = "";
         }
 
+        final String requestedVersion = mcVersion;
         playButton.setEnabled(false);
         progressBar.setVisible(true);
         progressBar.setIndeterminate(true);
         console.clear();
-        console.appendLauncherMessage(Strings.get("play.preparing", mcVersion));
+        console.appendLauncherMessage(Strings.get("play.preparing",
+                requestedVersion.isBlank() ? "MargyCraft" : requestedVersion));
 
         ProgressListener listener = new ProgressListener() {
             @Override
@@ -320,14 +412,22 @@ public final class PlayPanel extends JPanel {
         new SwingWorker<GameProcess, Void>() {
             @Override
             protected GameProcess doInBackground() throws Exception {
-                String versionToLaunch = installLoaderIfNeeded(mcVersion, listener);
-                ModBuildManager buildManager = new ModBuildManager(context.paths());
-                ModBuildManager.ModBuild activeBuild = buildManager.list().stream()
-                        .filter(build -> build.id.equals(context.settings().selectedModBuildId))
-                        .findFirst().orElse(null);
-                java.nio.file.Path gameDir = activeBuild == null
-                        ? isolatedGameDir(mcVersion, loaderType)
-                        : buildManager.gameDir(activeBuild);
+                String effectiveVersion = resolveVersionDynamically ? resolveLatestRelease() : requestedVersion;
+                String versionToLaunch = loaderType == LoaderType.VANILLA
+                        ? effectiveVersion
+                        : installLoaderIfNeeded(effectiveVersion, listener);
+                java.nio.file.Path gameDir;
+                if (forceVanillaDirectory) {
+                    gameDir = isolatedGameDir(effectiveVersion, LoaderType.VANILLA);
+                } else {
+                    ModBuildManager buildManager = new ModBuildManager(context.paths());
+                    ModBuildManager.ModBuild activeBuild = buildManager.list().stream()
+                            .filter(build -> build.id.equals(context.settings().selectedModBuildId))
+                            .findFirst().orElse(null);
+                    gameDir = activeBuild == null
+                            ? isolatedGameDir(effectiveVersion, loaderType)
+                            : buildManager.gameDir(activeBuild);
+                }
                 return context.gameLauncher().launch(
                         versionToLaunch,
                         account,
@@ -335,7 +435,8 @@ public final class PlayPanel extends JPanel {
                         listener,
                         console::append,
                         exitCode -> SwingUtilities.invokeLater(() -> onGameExit(exitCode)),
-                        gameDir);
+                        gameDir,
+                        quickPlayServer);
             }
 
             @Override

@@ -38,12 +38,14 @@ public final class ModManager {
         public final String fileName;
         public final boolean enabled;
         public final long size;
+        public final boolean modpack;
 
-        ModFile(Path path, boolean enabled, long size) {
+        ModFile(Path path, boolean enabled, long size, boolean modpack) {
             this.path = path;
             this.fileName = path.getFileName().toString();
             this.enabled = enabled;
             this.size = size;
+            this.modpack = modpack;
         }
 
         public String displayName() {
@@ -53,6 +55,8 @@ public final class ModManager {
             }
             if (name.endsWith(".jar")) {
                 name = name.substring(0, name.length() - 4);
+            } else if (name.toLowerCase().endsWith(".mrpack")) {
+                name = name.substring(0, name.length() - ".mrpack".length());
             }
             return name;
         }
@@ -89,7 +93,8 @@ public final class ModManager {
                 String name = path.getFileName().toString().toLowerCase();
                 boolean isJar = name.endsWith(".jar");
                 boolean isDisabled = name.endsWith(".jar" + DISABLED_SUFFIX);
-                if (!isJar && !isDisabled) {
+                boolean isModpack = name.endsWith(".mrpack");
+                if (!isJar && !isDisabled && !isModpack) {
                     continue;
                 }
                 long size;
@@ -98,7 +103,7 @@ public final class ModManager {
                 } catch (IOException e) {
                     size = 0;
                 }
-                result.add(new ModFile(path, isJar, size));
+                result.add(new ModFile(path, isJar, size, isModpack));
             }
         } catch (IOException e) {
             System.err.println("Не удалось прочитать каталог модов: " + e.getMessage());

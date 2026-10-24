@@ -35,7 +35,7 @@ public final class AuthlibInjector {
         } catch (IOException e) {
 
             if (Files.exists(jar)) {
-                listener.onMessage("Не удалось проверить обновление authlib-injector, используется локальная копия");
+                listener.onMessage(by.agro.launcher.i18n.Strings.get("authlib.updateFailed"));
                 return jar;
             }
             throw new IOException("Failed to retrieve authlib-injector: " + e.getMessage(), e);
@@ -65,13 +65,14 @@ public final class AuthlibInjector {
             return jar;
         }
 
-        listener.onProgress("authlib-injector", 0, 1, "загрузка " + version);
+        listener.onProgress("authlib-injector", 0, 1,
+                by.agro.launcher.i18n.Strings.get("authlib.downloading", version));
         Files.createDirectories(paths.authlibDir());
         downloader.downloadVerified(url, jar, "SHA-256", sha256, 64L * 1024 * 1024);
         Files.writeString(versionMarker, version);
 
         listener.onProgress("authlib-injector", 1, 1, version);
-        listener.onMessage("authlib-injector " + version + " готов");
+        listener.onMessage(by.agro.launcher.i18n.Strings.get("authlib.ready", version));
         return jar;
     }
 

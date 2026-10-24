@@ -20,6 +20,7 @@ public final class LaunchSession implements AutoCloseable {
     private final Deque<String> lines = new ArrayDeque<>();
     private final LogAnalyzer analyzer;
     private final Path logFile;
+    private final java.io.Writer logWriter;
 
     public LaunchSession(Path logsDir, String minecraftVersion, String loader, Integer javaMajor,
                          String javaSource, int ramMb, List<String> command) throws IOException {
@@ -43,6 +44,8 @@ public final class LaunchSession implements AutoCloseable {
         logFile = logsDir.resolve("launch-" + stamp + "-" + report.sessionId.substring(0, 8) + ".log");
         Files.writeString(logFile, "Command: " + report.command + System.lineSeparator(),
                 StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        logWriter = Files.newBufferedWriter(logFile, StandardCharsets.UTF_8,
+                StandardOpenOption.WRITE, StandardOpenOption.APPEND);
         by.agro.launcher.core.SecureFiles.setOwnerOnly(logFile);
     }
 
@@ -51,13 +54,10 @@ public final class LaunchSession implements AutoCloseable {
         analyzer.accept(line);
         if (lines.size() == MAX_LINES) lines.removeFirst();
         lines.addLast(line);
-      
         try {
-            List<String> persisted = new ArrayList<>(lines.size() + 1);
-            persisted.add("Command: " + report.command);
-            persisted.addAll(lines);
-            Files.write(logFile, persisted, StandardCharsets.UTF_8,
-                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            logWriter.write(line);
+            logWriter.write(System.lineSeparator());
+            logWriter.flush();
         } catch (IOException ignored) {
         }
     }
@@ -68,12 +68,9 @@ public final class LaunchSession implements AutoCloseable {
         updateAnalysis();
         report.log = new ArrayList<>(lines);
         try {
-            List<String> persisted = new ArrayList<>(lines.size() + 2);
-            persisted.add("Command: " + report.command);
-            persisted.addAll(lines);
-            persisted.add("Exit code: " + exitCode);
-            Files.write(logFile, persisted, StandardCharsets.UTF_8,
-                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            logWriter.write("Exit code: " + exitCode);
+            logWriter.write(System.lineSeparator());
+            logWriter.flush();
         } catch (IOException ignored) {
         }
     }
@@ -95,6 +92,9 @@ public final class LaunchSession implements AutoCloseable {
 
     @Override
     public synchronized void close() {
-
+        try {
+            logWriter.close();
+        } catch (IOException ignored) {
+        }
     }
 }

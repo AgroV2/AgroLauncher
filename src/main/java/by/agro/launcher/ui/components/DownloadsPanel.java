@@ -16,7 +16,7 @@ import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 
-/** Compact active/recent downloads view. */
+
 public final class DownloadsPanel extends JPanel implements DownloadManager.Listener {
     private final DownloadManager manager;
     private final JPanel rows = new JPanel();

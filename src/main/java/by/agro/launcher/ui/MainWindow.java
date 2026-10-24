@@ -9,6 +9,7 @@ import by.agro.launcher.ui.components.NavIcon;
 import by.agro.launcher.ui.components.SideNavButton;
 import by.agro.launcher.ui.components.UiFactory;
 import by.agro.launcher.ui.panels.AccountsPanel;
+import by.agro.launcher.ui.panels.InstancesPanel;
 import by.agro.launcher.ui.panels.AboutPanel;
 import by.agro.launcher.ui.panels.ModsPanel;
 import by.agro.launcher.ui.panels.PlayPanel;
@@ -43,6 +44,7 @@ public final class MainWindow extends JFrame {
 
     private static final String CARD_PLAY = "play";
     private static final String CARD_VERSIONS = "versions";
+    private static final String CARD_INSTANCES = "instances";
     private static final String CARD_ACCOUNTS = "accounts";
     private static final String CARD_MODS = "mods";
     private static final String CARD_SETTINGS = "settings";
@@ -71,6 +73,7 @@ public final class MainWindow extends JFrame {
 
     private PlayPanel playPanel;
     private VersionsPanel versionsPanel;
+    private InstancesPanel instancesPanel;
     private AccountsPanel accountsPanel;
     private ModsPanel modsPanel;
     private SettingsPanel settingsPanel;
@@ -96,6 +99,12 @@ public final class MainWindow extends JFrame {
         add(buildSidebar(), BorderLayout.WEST);
         add(cards, BorderLayout.CENTER);
         add(buildStatusBar(), BorderLayout.SOUTH);
+
+        by.agro.launcher.ui.components.WindowGestures.makeDraggable(this, sidebar);
+        by.agro.launcher.ui.components.WindowGestures.makeDraggable(this, statusBar);
+        by.agro.launcher.ui.components.WindowGestures.makeDraggable(this, statusLabel);
+        by.agro.launcher.ui.components.WindowGestures.makeDraggable(this, offlineWarningLabel);
+        by.agro.launcher.ui.components.WindowGestures.installResize(this);
 
         applyWindowIcons();
 
@@ -134,6 +143,7 @@ public final class MainWindow extends JFrame {
 
     private void checkForUpdates() {
         if (context.settings().githubRepository == null || context.settings().githubRepository.isBlank()) return;
+        if (!context.settings().updateAutoCheck) return;
         new javax.swing.SwingWorker<UpdateChecker.Release, Void>() {
             protected UpdateChecker.Release doInBackground() throws Exception {
                 return UpdateChecker.latest(context.downloader(), context.settings().githubRepository, Main.VERSION);
@@ -221,6 +231,7 @@ public final class MainWindow extends JFrame {
     private void buildPanels() {
         playPanel = new PlayPanel(context, this::setStatus);
         versionsPanel = new VersionsPanel(context, this::setStatus, () -> playPanel.refresh());
+        instancesPanel = new InstancesPanel(context, this::setStatus, () -> showCard(CARD_PLAY));
         accountsPanel = new AccountsPanel(context, message -> {
             setStatus(message);
             playPanel.refresh();
@@ -232,11 +243,12 @@ public final class MainWindow extends JFrame {
                     playPanel.refresh();
                 },
                 this::onAppearanceChanged);
-        aboutPanel = new AboutPanel(context.settings(), this::setStatus);
+        aboutPanel = new AboutPanel(context, this::setStatus);
 
         cards.setBackground(AgroTheme.bgBase());
         cards.add(playPanel, CARD_PLAY);
         cards.add(versionsPanel, CARD_VERSIONS);
+        cards.add(instancesPanel, CARD_INSTANCES);
         cards.add(accountsPanel, CARD_ACCOUNTS);
         cards.add(modsPanel, CARD_MODS);
         cards.add(settingsPanel, CARD_SETTINGS);
@@ -255,6 +267,7 @@ public final class MainWindow extends JFrame {
 
         sidebar.add(navButton("nav.play", NavIcon.Kind.PLAY, CARD_PLAY));
         sidebar.add(navButton("nav.versions", NavIcon.Kind.VERSIONS, CARD_VERSIONS));
+        sidebar.add(navButton("nav.instances", NavIcon.Kind.INSTANCES, CARD_INSTANCES));
         sidebar.add(navButton("nav.accounts", NavIcon.Kind.ACCOUNTS, CARD_ACCOUNTS));
         sidebar.add(navButton("nav.mods", NavIcon.Kind.MODS, CARD_MODS));
         sidebar.add(navButton("nav.settings", NavIcon.Kind.SETTINGS, CARD_SETTINGS));
@@ -361,14 +374,25 @@ public final class MainWindow extends JFrame {
     }
 
     private void showCard(String card) {
-        currentCard = card;
-        cardLayout.show(cards, card);
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(() -> showCard(card));
+            return;
+        }
         for (SideNavButton button : navButtons) {
             button.setActive(card.equals(button.getClientProperty("card")));
         }
+        cardLayout.show(cards, card);
+        currentCard = card;
+        refreshCard(card);
+    }
+
+    private void refreshCard(String card) {
         switch (card) {
             case CARD_PLAY:
                 playPanel.refresh();
+                break;
+            case CARD_INSTANCES:
+                instancesPanel.refresh();
                 break;
             case CARD_MODS:
                 modsPanel.refresh();

@@ -64,6 +64,10 @@ public final class SettingsPanel extends JPanel {
     private final JCheckBox showConsole = new JCheckBox(Strings.get("settings.showConsole"));
     private final JCheckBox optimizedFlags = new JCheckBox(Strings.get("settings.optimizedFlags"));
     private final JLabel javaStatusLabel = new JLabel(" ");
+    private final JComboBox<String> proxyModeCombo = new JComboBox<>(new String[]{"NONE", "HTTP", "SOCKS"});
+    private final JTextField proxyHostField = new JTextField();
+    private final JSpinner proxyPortSpinner;
+    private final BackupsPanel backupsPanel;
 
     private final javax.swing.JTabbedPane tabs = new javax.swing.JTabbedPane();
     private final AppearancePanel appearancePanel;
@@ -84,6 +88,8 @@ public final class SettingsPanel extends JPanel {
         this.heightSpinner = new JSpinner(new SpinnerNumberModel(settings.windowHeight, 240, 4320, 2));
         this.downloadParallelismSpinner = new JSpinner(new SpinnerNumberModel(settings.downloadParallelism, 1, 32, 1));
         this.metadataCacheTtlSpinner = new JSpinner(new SpinnerNumberModel(settings.metadataCacheTtlMinutes, 1, 10080, 1));
+        this.proxyPortSpinner = new JSpinner(new SpinnerNumberModel(settings.proxyPort, 1, 65535, 1));
+        this.backupsPanel = new BackupsPanel(context, statusReporter);
 
         setOpaque(false);
         setLayout(new BorderLayout());
@@ -113,11 +119,14 @@ public final class SettingsPanel extends JPanel {
         general.add(UiFactory.verticalGap(16));
         general.add(buildAdvancedCard());
         general.add(UiFactory.verticalGap(16));
+        general.add(buildNetworkCard());
+        general.add(UiFactory.verticalGap(16));
         general.add(buildFoldersCard());
 
         tabs.setOpaque(false);
         tabs.addTab(Strings.get("settings.general"), UiFactory.scroll(general));
         tabs.addTab(Strings.get("settings.appearance"), appearancePanel);
+        tabs.addTab(Strings.get("settings.backups"), backupsPanel);
 
         add(header, BorderLayout.NORTH);
         add(tabs, BorderLayout.CENTER);
@@ -557,6 +566,62 @@ public final class SettingsPanel extends JPanel {
         return card;
     }
 
+    private JComponent buildNetworkCard() {
+        JPanel card = UiFactory.titledCard(Strings.get("settings.network"));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel body = UiFactory.transparentPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+        JPanel modeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        modeRow.setOpaque(false);
+        modeRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        modeRow.add(UiFactory.fieldLabel(Strings.get("settings.proxyMode")));
+        UiFactory.fixHeight(proxyModeCombo, 32);
+        proxyModeCombo.setSelectedItem(context.settings().proxyMode);
+        proxyModeCombo.addActionListener(e -> saveProxy());
+        modeRow.add(proxyModeCombo);
+        modeRow.add(UiFactory.hint(Strings.get("settings.proxyRestartHint")));
+
+        JPanel hostRow = new JPanel(new BorderLayout(10, 0));
+        hostRow.setOpaque(false);
+        hostRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        hostRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        proxyHostField.putClientProperty("JTextField.placeholderText", "127.0.0.1");
+        proxyHostField.setText(context.settings().proxyHost == null ? "" : context.settings().proxyHost);
+        proxyHostField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                saveProxy();
+            }
+        });
+        proxyPortSpinner.setPreferredSize(new Dimension(96, 30));
+        proxyPortSpinner.addChangeListener(e -> saveProxy());
+        JPanel portRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        portRow.setOpaque(false);
+        portRow.add(UiFactory.fieldLabel(Strings.get("settings.proxyPort")));
+        portRow.add(proxyPortSpinner);
+        hostRow.add(proxyHostField, BorderLayout.CENTER);
+        hostRow.add(portRow, BorderLayout.EAST);
+
+        body.add(modeRow);
+        body.add(UiFactory.verticalGap(10));
+        body.add(hostRow);
+
+        card.add(body, BorderLayout.CENTER);
+        return card;
+    }
+
+    private void saveProxy() {
+        String mode = (String) proxyModeCombo.getSelectedItem();
+        context.settings().proxyMode = mode == null ? "NONE" : mode;
+        context.settings().proxyHost = proxyHostField.getText().trim();
+        context.settings().proxyPort = (Integer) proxyPortSpinner.getValue();
+        context.settings().save();
+        by.agro.launcher.core.Downloader.configureProxy(
+                context.settings().proxyMode, context.settings().proxyHost, context.settings().proxyPort);
+    }
+
     private JComponent buildFoldersCard() {
         JPanel card = UiFactory.titledCard(Strings.get("settings.folders"));
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -741,6 +806,7 @@ public final class SettingsPanel extends JPanel {
         loadValues();
         refreshJavaInstallations();
         appearancePanel.reload();
+        backupsPanel.refresh();
     }
 
     private void report(String message) {

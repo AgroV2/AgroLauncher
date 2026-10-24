@@ -76,7 +76,7 @@ public final class ArchiveExtractor {
                 Path target = resolveSafely(root, name);
 
                 if (type == '1' || type == '2') {
-                    throw new IOException("Archive links are not allowed: " + name);
+                    skipExactly(gzip, paddedSize(size));
                 } else if (type == '5') {
                     createDirectoriesSafely(root, target);
                     skipExactly(gzip, paddedSize(size));

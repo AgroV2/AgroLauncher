@@ -91,8 +91,8 @@ public final class ModrinthVersion {
         Builder b = new Builder();
         b.id = Json.string(obj, "id", null);
         b.projectId = Json.string(obj, "project_id", null);
-        b.name = Json.string(obj, "name", "");
-        b.versionNumber = Json.string(obj, "version_number", "");
+        b.name = ModrinthProject.neutralizeHtml(Json.string(obj, "name", ""));
+        b.versionNumber = ModrinthProject.neutralizeHtml(Json.string(obj, "version_number", ""));
         b.versionType = Json.string(obj, "version_type", "release");
         b.datePublished = Json.string(obj, "date_published", null);
         b.downloads = Json.longValue(obj, "downloads", 0);
