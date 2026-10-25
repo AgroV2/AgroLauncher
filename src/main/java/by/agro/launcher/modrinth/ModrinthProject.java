@@ -143,8 +143,6 @@ public final class ModrinthProject {
         String serverSide;
         String dateModified;
     }
-    // JLabel и тултипы рендерят текст как HTML, если он начинается с <html;
-    // удалённые данные Modrinth не должны получить такой режим
     static String neutralizeHtml(String value) {
         if (value == null) {
             return null;

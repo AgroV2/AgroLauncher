@@ -14,6 +14,7 @@ public final class Settings {
     public boolean offlineMode = false;
     public String extraJvmArgs = "";
     public String extraGameArgs = "";
+    public String extraEnvVars = "";
     public int windowWidth = 854;
     public int windowHeight = 480;
     public boolean fullscreen = false;
@@ -230,6 +231,7 @@ public final class Settings {
         if (proxyHost == null) proxyHost = "";
         if (proxyPort <= 0 || proxyPort > 65535) proxyPort = 8080;
         if (quickPlayServer == null) quickPlayServer = "";
+        if (extraEnvVars == null) extraEnvVars = "";
         if (elyOAuthCallbackPort < 0 || elyOAuthCallbackPort > 65535) elyOAuthCallbackPort = 0;
         if (elyOAuthTimeoutSeconds <= 0) elyOAuthTimeoutSeconds = 180;
         if (elySkinUrlTemplate == null) elySkinUrlTemplate = "";

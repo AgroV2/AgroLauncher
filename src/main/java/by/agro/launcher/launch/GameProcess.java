@@ -33,9 +33,19 @@ public final class GameProcess {
     public static GameProcess start(List<String> command, Path workingDir,
                                     Consumer<String> onLine, IntConsumer onExit,
                                     LaunchSession session) throws IOException {
+        return start(command, workingDir, onLine, onExit, session, null);
+    }
+
+    public static GameProcess start(List<String> command, Path workingDir,
+                                    Consumer<String> onLine, IntConsumer onExit,
+                                    LaunchSession session,
+                                    java.util.Map<String, String> environment) throws IOException {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workingDir.toFile());
         builder.redirectErrorStream(true);
+        if (environment != null && !environment.isEmpty()) {
+            builder.environment().putAll(environment);
+        }
 
         Process process = builder.start();
 

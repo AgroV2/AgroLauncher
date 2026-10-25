@@ -589,6 +589,8 @@ public final class Strings {
         put("progress.allDownloaded", "всё уже загружено", "everything already downloaded");
 
         put("launch.command", "Запуск: {0}", "Launching: {0}");
+        put("launch.envApplied", "Переменные окружения для игры: {0}",
+                "Game environment variables: {0}");
         put("launch.javaSelected", "Требуется Java {0}, выбрана Java {1} ({2})",
                 "Java {0} required, using Java {1} ({2})");
         put("launch.ramRecommended", "Рекомендуемая память: {0}–{1} МБ", "Recommended RAM: {0}–{1} MB");
@@ -689,8 +691,8 @@ public final class Strings {
         put("diag.MIXIN_FAILURE.advice", "Проверьте совместимость модов и версий loader.",
                 "Check mod and loader version compatibility.");
         put("diag.NATIVE_OPENGL.title", "Ошибка native/OpenGL", "Native/OpenGL failure");
-        put("diag.NATIVE_OPENGL.advice", "Обновите видеодрайвер и проверьте архитектуру Java/native-библиотек.",
-                "Update the video driver and check the Java/native library architecture.");
+        put("diag.NATIVE_OPENGL.advice", "Обновите видеодрайвер и проверьте архитектуру Java/native-библиотек. На NVIDIA+Wayland при ошибке OpenGL добавьте __GLX_VENDOR_LIBRARY_NAME=nvidia в настройках «Переменные окружения».",
+                "Update the video driver and check the Java/native library architecture. On NVIDIA+Wayland with OpenGL failures add __GLX_VENDOR_LIBRARY_NAME=nvidia to Settings, Environment variables.");
         put("diag.CORRUPT_ARCHIVE.title", "Повреждён JAR/ZIP", "Corrupted JAR/ZIP");
         put("diag.CORRUPT_ARCHIVE.advice", "Повторно загрузите повреждённый файл или выполните восстановление.",
                 "Re-download the corrupted file or run a repair.");
@@ -787,6 +789,9 @@ public final class Strings {
         put("mods.modsElsewhere", "В текущей установке модов нет — они установлены в: {0}",
                 "The current installation has no mods — they are installed in: {0}");
         put("mods.switchTo", "Переключиться", "Switch");
+        put("settings.envVars", "Переменные окружения", "Environment variables");
+        put("settings.envVarsHint", "По одной KEY=VALUE на строку",
+                "One KEY=VALUE per line");
         put("mods.switchToTooltip", "Сделать установку с модами текущей",
                 "Make the installation with mods the current one");
         put("instances.buildsEmpty",

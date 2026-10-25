@@ -137,6 +137,7 @@ public final class GameLauncher {
 
         
         Files.createDirectories(options.gameDir.resolve("mods"));
+        linkSharedResourcePacks(options.gameDir);
 
         List<String> command = commandBuilder.build(options);
         listener.onProgress(Strings.get("progress.done"), 1, 1, Strings.get("progress.commandReady"));
@@ -173,8 +174,12 @@ public final class GameLauncher {
         if (javaWarning != null && onLine != null) {
             onLine.accept(javaWarning);
         }
+        java.util.Map<String, String> gameEnvironment = gameEnvironment();
+        if (gameEnvironment != null && !gameEnvironment.isEmpty()) {
+            listener.onMessage(Strings.get("launch.envApplied", String.join(", ", gameEnvironment.keySet())));
+        }
         try {
-            return GameProcess.start(command, gameDir, onLine, onExit, session);
+            return GameProcess.start(command, gameDir, onLine, onExit, session, gameEnvironment);
         } catch (IOException e) {
             session.close();
             throw e;
@@ -269,6 +274,114 @@ public final class GameLauncher {
         if (version.chain.size() > 1 && !Files.isRegularFile(paths.versionJson(version.id))) {
             throw new IOException("Offline launch blocked: loader profile is not installed locally");
         }
+    }
+
+    private void linkSharedResourcePacks(Path gameDir) {
+        linkSharedFolder(gameDir, "resourcepacks");
+        linkSharedFolder(gameDir, "shaderpacks");
+    }
+
+    private void linkSharedFolder(Path gameDir, String name) {
+        if (gameDir == null) {
+            return;
+        }
+        Path shared = paths.gameDir().resolve(name);
+        Path link = gameDir.resolve(name);
+        try {
+            if (Files.isSymbolicLink(link)) {
+                return;
+            }
+            if (!Files.exists(link, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                Files.createDirectories(shared);
+                createDirectoryLink(link, shared);
+                return;
+            }
+            if (!Files.isDirectory(link)) {
+                return;
+            }
+            if (Files.isSameFile(link, shared)) {
+                return;
+            }
+            migrateToShared(link, shared);
+        } catch (IOException | UnsupportedOperationException ignored) {
+
+        }
+    }
+
+    private void migrateToShared(Path instanceDir, Path shared) throws IOException {
+        Files.createDirectories(shared);
+        try (var files = Files.list(instanceDir)) {
+            for (Path file : files.toList()) {
+                Path target = shared.resolve(file.getFileName());
+                if (Files.exists(target) && Files.isSameFile(file, target)) {
+                    continue;
+                }
+                Files.move(file, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+        try (var files = Files.list(instanceDir)) {
+            if (files.findAny().isPresent()) {
+                return;
+            }
+        }
+        Files.delete(instanceDir);
+        createDirectoryLink(instanceDir, shared);
+    }
+
+    private void createDirectoryLink(Path link, Path target) throws IOException {
+        try {
+            Files.createSymbolicLink(link, target.toAbsolutePath());
+            return;
+        } catch (IOException | UnsupportedOperationException unsupported) {
+            if (!by.agro.launcher.core.Platform.isWindows()) {
+                return;
+            }
+            try {
+                Process process = new ProcessBuilder("cmd.exe", "/c", "mklink", "/J",
+                        link.toAbsolutePath().toString(),
+                        target.toAbsolutePath().toString())
+                        .redirectErrorStream(true)
+                        .start();
+                process.getInputStream().readAllBytes();
+                if (!process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                    process.destroyForcibly();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private java.util.Map<String, String> gameEnvironment() {
+        if (settings.extraEnvVars == null || settings.extraEnvVars.isBlank()) {
+            return null;
+        }
+        java.util.Map<String, String> environment = new java.util.LinkedHashMap<>();
+        for (String line : settings.extraEnvVars.split("\\R")) {
+            String entry = line.trim();
+            if (entry.isEmpty() || entry.startsWith("#")) {
+                continue;
+            }
+            int equals = entry.indexOf('=');
+            if (equals <= 0) {
+                continue;
+            }
+            String key = entry.substring(0, equals).trim();
+            if (key.startsWith("export ")) {
+                key = key.substring("export ".length()).trim();
+            }
+            String value = entry.substring(equals + 1).trim();
+            if (value.length() >= 2
+                    && ((value.startsWith("\"") && value.endsWith("\""))
+                    || (value.startsWith("'") && value.endsWith("'")))) {
+                value = value.substring(1, value.length() - 1);
+            }
+            if (key.isEmpty() || value.isEmpty()) {
+                continue;
+            }
+            environment.put(key, value);
+        }
+        return environment.isEmpty() ? null : environment;
     }
 
     private int countEnabledMods(Path gameDir) {

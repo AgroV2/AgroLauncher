@@ -54,6 +54,7 @@ public final class SettingsPanel extends JPanel {
     private final JComboBox<String> javaInstallationsCombo = new JComboBox<>();
     private final JTextField jvmArgsField = new JTextField();
     private final JTextField gameArgsField = new JTextField();
+    private final javax.swing.JTextArea envVarsField = new javax.swing.JTextArea();
     private final JSpinner widthSpinner;
     private final JSpinner heightSpinner;
     private final JSpinner downloadParallelismSpinner;
@@ -561,9 +562,43 @@ public final class SettingsPanel extends JPanel {
         body.add(gameLabel);
         body.add(UiFactory.verticalGap(4));
         body.add(gameArgsField);
+        body.add(UiFactory.verticalGap(12));
+        body.add(buildEnvVarsSection());
 
         card.add(body, BorderLayout.CENTER);
         return card;
+    }
+
+    private JComponent buildEnvVarsSection() {
+        JPanel section = UiFactory.transparentPanel();
+        section.setLayout(new BoxLayout(section, BoxLayout.Y_AXIS));
+        section.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel label = UiFactory.fieldLabel(Strings.get("settings.envVars"));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel hint = UiFactory.hint(Strings.get("settings.envVarsHint"));
+        hint.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        envVarsField.setRows(2);
+        envVarsField.setLineWrap(true);
+        envVarsField.setWrapStyleWord(true);
+        envVarsField.setFont(AgroTheme.font(13));
+        envVarsField.putClientProperty("JTextField.placeholderText",
+                "__GLX_VENDOR_LIBRARY_NAME=nvidia");
+        envVarsField.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override
+            public void focusLost(java.awt.event.FocusEvent e) {
+                context.settings().extraEnvVars = envVarsField.getText().trim();
+                context.settings().save();
+            }
+        });
+
+        section.add(label);
+        section.add(UiFactory.verticalGap(4));
+        section.add(envVarsField);
+        section.add(UiFactory.verticalGap(4));
+        section.add(hint);
+        return section;
     }
 
     private JComponent buildNetworkCard() {
@@ -670,6 +705,7 @@ public final class SettingsPanel extends JPanel {
         offlineMode.setSelected(settings.offlineMode);
         jvmArgsField.setText(settings.extraJvmArgs == null ? "" : settings.extraJvmArgs);
         gameArgsField.setText(settings.extraGameArgs == null ? "" : settings.extraGameArgs);
+        envVarsField.setText(settings.extraEnvVars == null ? "" : settings.extraEnvVars);
         widthSpinner.setValue(settings.windowWidth);
         heightSpinner.setValue(settings.windowHeight);
         fullscreen.setSelected(settings.fullscreen);

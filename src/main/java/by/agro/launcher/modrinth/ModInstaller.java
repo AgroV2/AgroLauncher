@@ -190,8 +190,8 @@ public final class ModInstaller {
     private Path destinationFor(String projectType) {
         return switch (projectType) {
             case "mod" -> gameDir.resolve("mods");
-            case "resourcepack" -> gameDir.resolve("resourcepacks");
-            case "shader" -> gameDir.resolve("shaderpacks");
+            case "resourcepack" -> paths.gameDir().resolve("resourcepacks");
+            case "shader" -> paths.gameDir().resolve("shaderpacks");
             default -> throw new IllegalArgumentException(
                     "Unknown Modrinth project type: " + projectType);
         };
