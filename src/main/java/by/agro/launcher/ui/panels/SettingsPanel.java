@@ -35,6 +35,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
@@ -66,6 +67,7 @@ public final class SettingsPanel extends JPanel {
     private final JCheckBox optimizedFlags = new JCheckBox(Strings.get("settings.optimizedFlags"));
     private final JLabel javaStatusLabel = new JLabel(" ");
     private final JComboBox<String> proxyModeCombo = new JComboBox<>(new String[]{"NONE", "HTTP", "SOCKS"});
+    private final JTextField gameDataPathField = new JTextField();
     private final JTextField proxyHostField = new JTextField();
     private final JSpinner proxyPortSpinner;
     private final BackupsPanel backupsPanel;
@@ -670,6 +672,29 @@ public final class SettingsPanel extends JPanel {
         JLabel gameLabel = UiFactory.hint(Strings.get("settings.gameFiles", paths.gameDir()));
         gameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
+        JPanel dataRow = new JPanel(new BorderLayout(8, 0));
+        dataRow.setOpaque(false);
+        dataRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        dataRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        gameDataPathField.putClientProperty("JTextField.placeholderText",
+                context.paths().gameDir().toString());
+        JButton gameDataBrowse = UiFactory.button(Strings.get("common.choose"));
+        gameDataBrowse.addActionListener(e -> browseForGameDataDir());
+        dataRow.add(gameDataPathField, BorderLayout.CENTER);
+        dataRow.add(gameDataBrowse, BorderLayout.EAST);
+
+        JPanel dataButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        dataButtons.setOpaque(false);
+        dataButtons.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JButton copyData = UiFactory.button(Strings.get("settings.gameDataCopy"));
+        copyData.addActionListener(e -> applyGameDataPath(false));
+        JButton moveData = UiFactory.button(Strings.get("settings.gameDataMove"));
+        moveData.addActionListener(e -> applyGameDataPath(true));
+        dataButtons.add(copyData);
+        dataButtons.add(moveData);
+        JLabel dataHint = UiFactory.hint(Strings.get("settings.gameDataPathHint"));
+        dataHint.setAlignmentX(Component.LEFT_ALIGNMENT);
+
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         buttons.setOpaque(false);
         buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -680,14 +705,28 @@ public final class SettingsPanel extends JPanel {
         openMods.addActionListener(e -> openFolder(paths.modsDir()));
         JButton openRoot = UiFactory.button(Strings.get("settings.openLauncherFolder"));
         openRoot.addActionListener(e -> openFolder(paths.root()));
+        JButton exportSettingsButton = UiFactory.button(Strings.get("settings.exportSettings"));
+        exportSettingsButton.addActionListener(e -> exportLauncherSettings());
+        JButton importSettingsButton = UiFactory.button(Strings.get("settings.importSettings"));
+        importSettingsButton.addActionListener(e -> importLauncherSettings());
 
         buttons.add(openGame);
         buttons.add(openMods);
         buttons.add(openRoot);
+        buttons.add(exportSettingsButton);
+        buttons.add(importSettingsButton);
 
         body.add(rootLabel);
         body.add(UiFactory.verticalGap(4));
         body.add(gameLabel);
+        body.add(UiFactory.verticalGap(12));
+        body.add(UiFactory.fieldLabel(Strings.get("settings.gameDataPath")));
+        body.add(UiFactory.verticalGap(4));
+        body.add(dataRow);
+        body.add(UiFactory.verticalGap(6));
+        body.add(dataButtons);
+        body.add(UiFactory.verticalGap(4));
+        body.add(dataHint);
         body.add(UiFactory.verticalGap(12));
         body.add(buttons);
 
@@ -716,6 +755,7 @@ public final class SettingsPanel extends JPanel {
         metadataCacheEnabled.setSelected(settings.metadataCacheEnabled);
         metadataCacheTtlSpinner.setValue(settings.metadataCacheTtlMinutes);
         metadataCacheTtlSpinner.setEnabled(settings.metadataCacheEnabled);
+        gameDataPathField.setText(settings.gameDataPath == null ? "" : settings.gameDataPath);
         widthSpinner.setEnabled(!settings.fullscreen);
         heightSpinner.setEnabled(!settings.fullscreen);
         updateJavaFieldsState();
@@ -823,18 +863,188 @@ public final class SettingsPanel extends JPanel {
     }
 
     private void openFolder(Path path) {
-        try {
-            java.nio.file.Files.createDirectories(path);
-            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
-                Desktop.getDesktop().open(path.toFile());
-            } else {
-                JOptionPane.showMessageDialog(this, path.toString(), Strings.get("settings.folderPath"),
-                        JOptionPane.INFORMATION_MESSAGE);
+        UiFactory.openInFileManager(this, path);
+    }
+
+    private void browseForGameDataDir() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle(Strings.get("settings.gameDataPath"));
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            gameDataPathField.setText(chooser.getSelectedFile().getAbsolutePath());
+        }
+    }
+
+    private void applyGameDataPath(boolean move) {
+        String value = gameDataPathField.getText().trim();
+        if (value.isEmpty()) {
+            context.settings().gameDataPath = "";
+            context.settings().save();
+            LauncherPaths.setGameDataDir(null);
+            report(Strings.get("settings.gameDataApplied", context.paths().gameDir()));
+            return;
+        }
+        Path target = Path.of(value).toAbsolutePath().normalize();
+        Path source = context.paths().gameDir().toAbsolutePath().normalize();
+        if (!Path.of(value).isAbsolute()) {
+            JOptionPane.showMessageDialog(this, Strings.get("settings.gameDataNotAbsolute"),
+                    Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (target.equals(source)) {
+            return;
+        }
+        if (target.startsWith(source) || source.startsWith(target)) {
+            JOptionPane.showMessageDialog(this, Strings.get("settings.gameDataNested"),
+                    Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        int answer = JOptionPane.showConfirmDialog(this,
+                Strings.get("settings.gameDataConfirm", target),
+                Strings.get("common.confirm"), JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+        if (answer != JOptionPane.YES_OPTION) {
+            return;
+        }
+        report(move ? Strings.get("settings.gameDataMove") : Strings.get("settings.gameDataCopy"));
+        new SwingWorker<Path, Void>() {
+            @Override
+            protected Path doInBackground() throws Exception {
+                migrateGameData(source, target, move);
+                return target;
             }
+
+            @Override
+            protected void done() {
+                try {
+                    Path applied = get();
+                    context.settings().gameDataPath = applied.toString();
+                    context.settings().save();
+                    LauncherPaths.setGameDataDir(applied);
+                    report(Strings.get("settings.gameDataApplied", applied));
+                    JOptionPane.showMessageDialog(SettingsPanel.this,
+                            Strings.get("settings.gameDataApplied", applied),
+                            Strings.get("settings.gameDataPath"),
+                            JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    JOptionPane.showMessageDialog(SettingsPanel.this,
+                            cause.getMessage() == null ? cause.toString() : cause.getMessage(),
+                            Strings.get("common.error"), JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
+    private static void migrateGameData(Path source, Path target, boolean deleteSource)
+            throws java.io.IOException {
+        java.nio.file.Files.createDirectories(target);
+        try (var walk = java.nio.file.Files.walk(source)) {
+            for (Path entry : walk.toList()) {
+                if (entry.equals(source)) {
+                    continue;
+                }
+                Path destination = target.resolve(source.relativize(entry)).normalize();
+                if (!destination.startsWith(target)) {
+                    continue;
+                }
+                if (java.nio.file.Files.isSymbolicLink(entry)) {
+                    try {
+                        if (!java.nio.file.Files.exists(destination,
+                                java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                            java.nio.file.Files.createSymbolicLink(destination,
+                                    java.nio.file.Files.readSymbolicLink(entry));
+                        }
+                    } catch (IOException | UnsupportedOperationException ignored) {
+
+                    }
+                } else if (java.nio.file.Files.isDirectory(entry)) {
+                    java.nio.file.Files.createDirectories(destination);
+                } else if (java.nio.file.Files.isRegularFile(entry)) {
+                    java.nio.file.Files.createDirectories(destination.getParent());
+                    java.nio.file.Files.copy(entry, destination,
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
+        if (deleteSource) {
+            try (var walk = java.nio.file.Files.walk(source)) {
+                walk.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
+                    try {
+                        java.nio.file.Files.deleteIfExists(path);
+                    } catch (IOException ignored) {
+                    }
+                });
+            }
+        }
+    }
+
+    private void exportLauncherSettings() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle(Strings.get("settings.exportSettings"));
+        chooser.setSelectedFile(new File("agrolauncher-settings.json"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        try {
+            java.util.Map<String, Object> wrapper = new java.util.LinkedHashMap<>();
+            wrapper.put("format", 1);
+            wrapper.put("launcherVersion",
+                    by.agro.launcher.core.LauncherVersion.VERSION);
+            wrapper.put("settings", context.settings());
+            by.agro.launcher.core.Json.write(chooser.getSelectedFile().toPath(), wrapper);
+            String message = Strings.get("settings.settingsExported",
+                    chooser.getSelectedFile().getName());
+            report(message);
+            JOptionPane.showMessageDialog(this, message,
+                    Strings.get("settings.exportSettings"),
+                    JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(),
+                    Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    private void importLauncherSettings() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle(Strings.get("settings.importSettings"));
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        try {
+            com.google.gson.JsonObject root = by.agro.launcher.core.Json
+                    .readObject(chooser.getSelectedFile().toPath());
+            if (root == null || !root.has("settings")) {
+                throw new IOException("The file does not contain launcher settings");
+            }
+            Settings imported = by.agro.launcher.core.Json.GSON
+                    .fromJson(root.get("settings"), Settings.class);
+            if (imported == null) {
+                throw new IOException("The file does not contain launcher settings");
+            }
+            int answer = JOptionPane.showConfirmDialog(this,
+                    Strings.get("settings.importConfirm"),
+                    Strings.get("settings.importSettings"),
+                    JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (answer != JOptionPane.YES_OPTION) {
+                return;
+            }
+            for (java.lang.reflect.Field field : Settings.class.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                    continue;
+                }
+                field.setAccessible(true);
+                field.set(context.settings(), field.get(imported));
+            }
+            context.settings().save();
+            JOptionPane.showMessageDialog(this,
+                    Strings.get("settings.settingsImportedRestart"),
+                    Strings.get("settings.importSettings"),
+                    JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this,
-                    Strings.get("mods.openFolderFailed", e.getMessage()),
-                    Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
+                    Strings.get("settings.importFailed", e.getMessage()),
+                    Strings.get("common.error"), JOptionPane.ERROR_MESSAGE);
         }
     }
 

@@ -67,6 +67,13 @@ public final class NativesExtractor {
                 if (entryCount > MAX_EXTRACTED_ENTRIES || totalBytes > MAX_EXTRACTED_BYTES) {
                     throw new IOException("Native archive exceeds the extraction limits");
                 }
+                long declaredSize = entry.getSize();
+                if (declaredSize > 0
+                        && (declaredSize > MAX_EXTRACTED_BYTES
+                        || totalBytes + declaredSize > MAX_EXTRACTED_BYTES)) {
+                    throw new IOException("Native archive entry exceeds the extraction size limit: "
+                            + entry.getName());
+                }
                 String name = entry.getName();
                 if (isExcluded(name, excludes)) {
                     continue;

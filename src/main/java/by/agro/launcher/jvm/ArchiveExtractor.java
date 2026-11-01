@@ -19,6 +19,7 @@ public final class ArchiveExtractor {
 
     private static final int MAX_ENTRIES = 100_000;
     private static final long MAX_EXPANDED_BYTES = 8L * 1024 * 1024 * 1024;
+    private static final long MAX_METADATA_BYTES = 1024 * 1024;
 
     private ArchiveExtractor() {
     }
@@ -51,6 +52,7 @@ public final class ArchiveExtractor {
         try (InputStream fileIn = Files.newInputStream(archive);
              GZIPInputStream gzip = new GZIPInputStream(new BufferedInputStream(fileIn))) {
             byte[] header = new byte[512];
+            String pendingLongName = null;
             while (true) {
                 int read = readFully(gzip, header, 0, header.length);
                 if (read == 0 || isEmptyBlock(header)) {
@@ -73,6 +75,31 @@ public final class ArchiveExtractor {
                 }
                 char type = (char) (header[156] & 0xff);
                 String mode = readString(header, 100, 8);
+
+                if (type == 'L' || type == 'x' || type == 'g' || type == 'K') {
+                    if (size > MAX_METADATA_BYTES) {
+                        throw new IOException("Tar metadata entry is too large");
+                    }
+                    budget.addBytes(size);
+                    byte[] data = new byte[(int) size];
+                    if (readFully(gzip, data, 0, data.length) != data.length) {
+                        throw new IOException("Unexpected end of archive");
+                    }
+                    skipExactly(gzip, paddedSize(size) - size);
+                    if (type == 'L') {
+                        pendingLongName = readString(data, 0, data.length);
+                    } else if (type == 'x') {
+                        String paxPath = parsePaxPath(data);
+                        if (paxPath != null) {
+                            pendingLongName = paxPath;
+                        }
+                    }
+                    continue;
+                }
+                if (pendingLongName != null) {
+                    name = pendingLongName;
+                    pendingLongName = null;
+                }
                 Path target = resolveSafely(root, name);
 
                 if (type == '1' || type == '2') {
@@ -115,7 +142,12 @@ public final class ArchiveExtractor {
         if (normalizedName.startsWith("/") || normalizedName.matches("^[A-Za-z]:.*")) {
             throw new IOException("Absolute archive path is not allowed: " + entryName);
         }
-        Path resolved = root.resolve(normalizedName).normalize();
+        Path resolved;
+        try {
+            resolved = root.resolve(normalizedName).normalize();
+        } catch (java.nio.file.InvalidPathException e) {
+            throw new IOException("Invalid archive path: " + entryName, e);
+        }
         if (!resolved.startsWith(root)) {
             throw new IOException("Archive path escapes target directory: " + entryName);
         }
@@ -164,6 +196,39 @@ public final class ArchiveExtractor {
         } catch (ArithmeticException e) {
             return false;
         }
+    }
+
+    static String parsePaxPath(byte[] data) throws IOException {
+        String path = null;
+        int pos = 0;
+        while (pos < data.length) {
+            int space = pos;
+            while (space < data.length && data[space] != ' ') {
+                space++;
+            }
+            if (space >= data.length) {
+                break;
+            }
+            int length;
+            try {
+                length = Integer.parseInt(new String(data, pos, space - pos, java.nio.charset.StandardCharsets.US_ASCII));
+            } catch (NumberFormatException e) {
+                throw new IOException("Invalid PAX header");
+            }
+            if (length <= space - pos + 2 || length > data.length - pos) {
+                throw new IOException("Invalid PAX header length");
+            }
+            if (data[pos + length - 1] != '\n') {
+                throw new IOException("Invalid PAX record terminator");
+            }
+            String record = new String(data, space + 1, pos + length - space - 2, java.nio.charset.StandardCharsets.UTF_8);
+            int eq = record.indexOf('=');
+            if (eq > 0 && record.substring(0, eq).equals("path")) {
+                path = record.substring(eq + 1);
+            }
+            pos += length;
+        }
+        return path;
     }
 
     private static long paddedSize(long size) throws IOException {

@@ -107,6 +107,9 @@ public final class IconCache {
             
             SafeNetwork.validateResolvedAddresses(current);
             HttpURLConnection connection = (HttpURLConnection) current.toURL().openConnection();
+            if (connection instanceof javax.net.ssl.HttpsURLConnection https) {
+                SafeNetwork.pinConnection(https, current);
+            }
             connection.setRequestProperty("User-Agent", by.agro.launcher.core.LauncherVersion.USER_AGENT);
             connection.setConnectTimeout(12_000);
             connection.setReadTimeout(20_000);

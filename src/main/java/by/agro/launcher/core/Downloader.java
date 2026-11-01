@@ -8,9 +8,13 @@ import java.net.HttpCookie;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.Proxy;
+import java.net.ProxySelector;
 import java.net.Socket;
 import java.net.URI;
 import java.net.URL;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -75,6 +79,74 @@ public final class Downloader {
     private static final java.util.Map<Path, String> VERIFIED_FILES =
             new java.util.concurrent.ConcurrentHashMap<>();
 
+    public static final class PersistentEntry {
+        public long size;
+        public long mtime;
+        public String sha1;
+
+        public PersistentEntry() {
+        }
+
+        PersistentEntry(long size, long mtime, String sha1) {
+            this.size = size;
+            this.mtime = mtime;
+            this.sha1 = sha1;
+        }
+    }
+
+    private static final int MAX_PERSISTENT_ENTRIES = 50_000;
+    private static final java.util.Map<String, PersistentEntry> PERSISTENT_VERIFIED =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private static volatile Path verificationCacheFile;
+    private static volatile boolean verificationDirty;
+    private static volatile boolean verificationLoaded;
+
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(Downloader::saveVerificationCache,
+                "agro-verify-cache"));
+    }
+
+    public static void setVerificationCacheFile(Path file) {
+        verificationCacheFile = file;
+    }
+
+    private static void loadVerificationCache() {
+        if (verificationLoaded) {
+            return;
+        }
+        verificationLoaded = true;
+        Path file = verificationCacheFile;
+        if (file == null || !Files.isRegularFile(file)) {
+            return;
+        }
+        try (var reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            java.util.Map<String, PersistentEntry> loaded = Json.GSON.fromJson(reader,
+                    new com.google.gson.reflect.TypeToken<java.util.Map<String, PersistentEntry>>() {
+                    }.getType());
+            if (loaded != null) {
+                PERSISTENT_VERIFIED.putAll(loaded);
+            }
+        } catch (Exception ignored) {
+
+        }
+    }
+
+    private static void saveVerificationCache() {
+        Path file = verificationCacheFile;
+        if (file == null || !verificationDirty) {
+            return;
+        }
+        verificationDirty = false;
+        try {
+            Files.createDirectories(file.getParent());
+            java.util.Map<String, PersistentEntry> snapshot = new java.util.LinkedHashMap<>();
+            PERSISTENT_VERIFIED.forEach((path, entry) -> snapshot.put(path, entry));
+            Json.write(file, snapshot);
+        } catch (Exception ignored) {
+
+        }
+    }
+
     public boolean verifyOnce(Path target, String expectedSha1) {
         if (target == null) {
             return false;
@@ -85,9 +157,36 @@ public final class Downloader {
         if (expectedSha1.equalsIgnoreCase(VERIFIED_FILES.get(target))) {
             return true;
         }
+        loadVerificationCache();
+        PersistentEntry entry = PERSISTENT_VERIFIED.get(target.toString());
+        if (entry != null && expectedSha1.equalsIgnoreCase(entry.sha1)) {
+            try {
+                var attrs = Files.readAttributes(target,
+                        java.nio.file.attribute.BasicFileAttributes.class);
+                if (attrs.size() == entry.size
+                        && attrs.lastModifiedTime().toMillis() == entry.mtime) {
+                    VERIFIED_FILES.put(target, expectedSha1);
+                    return true;
+                }
+            } catch (IOException ignored) {
+
+            }
+        }
         boolean verified = HashUtil.verify(target, expectedSha1);
         if (verified) {
             VERIFIED_FILES.put(target, expectedSha1);
+            if (PERSISTENT_VERIFIED.size() < MAX_PERSISTENT_ENTRIES) {
+                try {
+                    var attrs = Files.readAttributes(target,
+                            java.nio.file.attribute.BasicFileAttributes.class);
+                    PERSISTENT_VERIFIED.put(target.toString(), new PersistentEntry(
+                            attrs.size(), attrs.lastModifiedTime().toMillis(),
+                            expectedSha1.toLowerCase(java.util.Locale.ROOT)));
+                    verificationDirty = true;
+                } catch (IOException ignored) {
+
+                }
+            }
         }
         return verified;
     }
@@ -137,6 +236,9 @@ public final class Downloader {
     }
 
     public void downloadAll(List<Task> tasks, String stageName, ProgressListener listener) throws IOException {
+        for (Task task : tasks) {
+            SafeNetwork.ensureAllowedDownloadHost(task.url);
+        }
         List<Task> pending = filterUnverified(tasks);
         if (pending.isEmpty()) {
             listener.onProgress(stageName, 1, 1, by.agro.launcher.i18n.Strings.get("progress.allDownloaded"));
@@ -167,6 +269,7 @@ public final class Downloader {
                 firstError.compareAndSet(null, e);
             }
         }
+        saveVerificationCache();
         if (firstError.get() != null) {
             throw new IOException("Failed to download files: " + firstError.get().getMessage(), firstError.get());
         }
@@ -177,6 +280,7 @@ public final class Downloader {
     }
 
     public void download(String url, Path target, String expectedSha1, long expectedSize) throws IOException {
+        SafeNetwork.ensureAllowedDownloadHost(url);
         if (verifyOnce(target, expectedSha1)) {
             return;
         }
@@ -305,6 +409,14 @@ public final class Downloader {
     }
 
     public String getString(String url, Map<String, String> headers) throws IOException {
+        HttpClient client = metadataClient();
+        if (client != null) {
+            return getStringHttp2(client, url, headers);
+        }
+        return getStringLegacy(url, headers);
+    }
+
+    private String getStringLegacy(String url, Map<String, String> headers) throws IOException {
         HttpURLConnection connection = openWithRedirects(url, headers);
         try (InputStream in = connection.getInputStream();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -388,6 +500,80 @@ public final class Downloader {
         return total;
     }
 
+    private static volatile HttpClient metadataHttpClient;
+
+    private HttpClient metadataClient() {
+        HttpClient existing = metadataHttpClient;
+        if (existing != null) {
+            return existing;
+        }
+        java.net.Proxy current = proxy;
+        if (current != java.net.Proxy.NO_PROXY && current.type() == java.net.Proxy.Type.SOCKS) {
+            return null;
+        }
+        HttpClient.Builder builder = HttpClient.newBuilder()
+                .connectTimeout(java.time.Duration.ofSeconds(20))
+                .followRedirects(HttpClient.Redirect.NEVER);
+        if (current != java.net.Proxy.NO_PROXY && current.address() instanceof java.net.InetSocketAddress address) {
+            builder.proxy(ProxySelector.of(address));
+        }
+        metadataHttpClient = builder.build();
+        return metadataHttpClient;
+    }
+
+    private String getStringHttp2(HttpClient client, String url, Map<String, String> headers)
+            throws IOException {
+        URI current = SafeNetwork.requirePublicHttps(url);
+        for (int i = 0; i < MAX_REDIRECTS; i++) {
+            HttpRequest.Builder request = HttpRequest.newBuilder(current)
+                    .timeout(java.time.Duration.ofSeconds(30))
+                    .header("User-Agent", USER_AGENT)
+                    .header("Accept", "*/*")
+                    .GET();
+            String cookie = cookieHeader(current.getHost());
+            if (cookie != null) {
+                request.header("Cookie", cookie);
+            }
+            if (headers != null) {
+                for (Map.Entry<String, String> entry : headers.entrySet()) {
+                    if (!"cookie".equalsIgnoreCase(entry.getKey())) {
+                        request.header(entry.getKey(), entry.getValue());
+                    }
+                }
+            }
+            HttpResponse<InputStream> response;
+            try {
+                response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Interrupted while fetching " + current, e);
+            }
+            collectCookies(response.headers().map(), current);
+            int code = response.statusCode();
+            if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                String location = response.headers().firstValue("Location").orElse(null);
+                try (InputStream body = response.body()) {
+                    body.readAllBytes();
+                } catch (IOException ignored) {
+                }
+                if (location == null || location.isBlank()) {
+                    throw new IOException("Redirect response has no Location header: " + current);
+                }
+                current = SafeNetwork.resolvePublicHttps(current, location);
+                continue;
+            }
+            if (code < 200 || code >= 300) {
+                throw new IOException("HTTP " + code + " for " + current);
+            }
+            try (InputStream in = response.body();
+                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                copyLimited(in, out, MAX_TEXT_BYTES);
+                return out.toString(StandardCharsets.UTF_8);
+            }
+        }
+        throw new IOException("Too many redirects for " + url);
+    }
+
     private HttpURLConnection openWithRedirects(String url, Map<String, String> headers) throws IOException {
         URI current = SafeNetwork.requirePublicHttps(url);
         for (int i = 0; i < MAX_REDIRECTS; i++) {
@@ -414,17 +600,11 @@ public final class Downloader {
 
     private HttpURLConnection open(URI uri, Map<String, String> headers) throws IOException {
 
-        InetAddress[] validated = SafeNetwork.resolveAndValidate(uri);
+        SafeNetwork.resolveAndValidate(uri);
         URL parsed = uri.toURL();
         HttpURLConnection connection = (HttpURLConnection) parsed.openConnection(proxy);
-        if (proxy == Proxy.NO_PROXY && connection instanceof javax.net.ssl.HttpsURLConnection https
-                && validated.length > 0) {
-            https.setSSLSocketFactory(new PinnedAddressSSLSocketFactory(validated[0], uri.getHost()));
-            String hostHeader = uri.getHost();
-            if (uri.getPort() != -1 && uri.getPort() != 443) {
-                hostHeader = hostHeader + ":" + uri.getPort();
-            }
-            https.setRequestProperty("Host", hostHeader);
+        if (proxy == Proxy.NO_PROXY && connection instanceof javax.net.ssl.HttpsURLConnection https) {
+            SafeNetwork.pinConnection(https, uri);
         }
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
@@ -446,9 +626,13 @@ public final class Downloader {
     }
 
     private void collectCookies(HttpURLConnection connection, URI origin) {
+        collectCookies(connection.getHeaderFields(), origin);
+    }
+
+    private void collectCookies(Map<String, List<String>> responseHeaders, URI origin) {
         Map<String, CookieRecord> hostCookies = cookiesByHost.computeIfAbsent(
                 origin.getHost().toLowerCase(), ignored -> new ConcurrentHashMap<>());
-        for (Map.Entry<String, List<String>> header : connection.getHeaderFields().entrySet()) {
+        for (Map.Entry<String, List<String>> header : responseHeaders.entrySet()) {
             if (header.getKey() == null || !"set-cookie".equalsIgnoreCase(header.getKey())) {
                 continue;
             }
@@ -487,65 +671,5 @@ public final class Downloader {
         }
         return result.length() == 0 ? null : result.toString();
     }
-    private static final class PinnedAddressSSLSocketFactory extends javax.net.ssl.SSLSocketFactory {
-        private final javax.net.ssl.SSLSocketFactory delegate =
-                (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
-        private final InetAddress address;
-        private final String host;
 
-        PinnedAddressSSLSocketFactory(InetAddress address, String host) {
-            this.address = address;
-            this.host = host;
-        }
-
-        private javax.net.ssl.SSLSocket pinned(int port) throws IOException {
-            javax.net.ssl.SSLSocket socket = (javax.net.ssl.SSLSocket) delegate.createSocket(address, port);
-            try {
-                javax.net.ssl.SSLParameters parameters = socket.getSSLParameters();
-                parameters.setServerNames(java.util.List.of(new javax.net.ssl.SNIHostName(host)));
-                socket.setSSLParameters(parameters);
-            } catch (RuntimeException ignored) {
-
-            }
-            return socket;
-        }
-
-        @Override
-        public Socket createSocket(String host, int port) throws IOException {
-            return pinned(port);
-        }
-
-        @Override
-        public Socket createSocket(String host, int port, InetAddress localAddress, int localPort)
-                throws IOException {
-            return pinned(port);
-        }
-
-        @Override
-        public Socket createSocket(InetAddress address, int port) throws IOException {
-            return pinned(port);
-        }
-
-        @Override
-        public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort)
-                throws IOException {
-            return pinned(port);
-        }
-
-        @Override
-        public Socket createSocket(Socket socket, String host, int port, boolean autoClose)
-                throws IOException {
-            return delegate.createSocket(socket, host, port, autoClose);
-        }
-
-        @Override
-        public String[] getDefaultCipherSuites() {
-            return delegate.getDefaultCipherSuites();
-        }
-
-        @Override
-        public String[] getSupportedCipherSuites() {
-            return delegate.getSupportedCipherSuites();
-        }
-    }
 }

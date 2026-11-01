@@ -99,6 +99,7 @@ public final class MetadataCache {
         try {
             Files.write(temporary, encoded);
             SecureFiles.atomicReplace(temporary, entry);
+            SecureFiles.setOwnerOnly(entry);
         } finally {
             Files.deleteIfExists(temporary);
         }

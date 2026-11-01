@@ -69,6 +69,7 @@ public final class ModBrowserPanel extends JPanel {
     private int currentOffset;
     private int totalHits;
     private boolean loading;
+    private boolean shownOnce;
 
     public ModBrowserPanel(LauncherContext context, Consumer<String> statusReporter,
                            Runnable onModsChanged) {
@@ -104,7 +105,13 @@ public final class ModBrowserPanel extends JPanel {
         add(buildFilters(), BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
         add(buildFooter(), BorderLayout.SOUTH);
+    }
 
+    public void ensureLoaded() {
+        if (shownOnce) {
+            return;
+        }
+        shownOnce = true;
         loadCategories();
         reload();
     }
@@ -217,6 +224,9 @@ public final class ModBrowserPanel extends JPanel {
     }
 
     public void reload() {
+        if (!shownOnce) {
+            return;
+        }
         currentOffset = 0;
         totalHits = 0;
         shownProjectIds.clear();
@@ -378,7 +388,7 @@ public final class ModBrowserPanel extends JPanel {
     public void refreshFilters() {
         updateSearchPlaceholder();
         updateFilterInfo();
-        if ("mod".equals(projectType) || "modpack".equals(projectType)) {
+        if (shownOnce && ("mod".equals(projectType) || "modpack".equals(projectType))) {
             reload();
         }
     }

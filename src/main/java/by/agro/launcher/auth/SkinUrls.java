@@ -41,7 +41,7 @@ final class SkinUrls {
             if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
                 String text = value.getAsString().trim();
                 if (text.isEmpty()) return "";
-                if (text.startsWith("http://") || text.startsWith("https://")) return text;
+                if (text.startsWith("https://")) return text;
                 try { return textureUrl(JsonParser.parseString(text)); }
                 catch (RuntimeException ignored) {
                     try {

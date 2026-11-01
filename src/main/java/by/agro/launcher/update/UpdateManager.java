@@ -121,9 +121,15 @@ public final class UpdateManager {
         restart.add("-jar");
         restart.add(target.toString());
         if (applicationArgs != null) restart.addAll(applicationArgs);
-        Files.writeString(script, Platform.isWindows()
+        by.agro.launcher.core.SecureFiles.rejectSymlinkParents(script);
+        if (Files.exists(script)) {
+            by.agro.launcher.core.SecureFiles.rejectSymbolicLink(script, "Update script");
+        }
+        Path scriptTemporary = script.resolveSibling(script.getFileName() + ".tmp");
+        Files.writeString(scriptTemporary, Platform.isWindows()
                 ? windowsScript(target, staged, backup, restart)
                 : unixScript(target, staged, backup, restart), StandardCharsets.UTF_8);
+        by.agro.launcher.core.SecureFiles.atomicReplace(scriptTemporary, script);
         if (!Platform.isWindows()) script.toFile().setExecutable(true, true);
         ProcessBuilder builder = Platform.isWindows()
                 ? new ProcessBuilder("cmd.exe", "/d", "/c", "start", "", "/b", script.toString())

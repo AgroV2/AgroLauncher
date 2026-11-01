@@ -6,6 +6,7 @@ import by.agro.launcher.auth.AuthlibInjector;
 import by.agro.launcher.auth.ElyByAuth;
 import by.agro.launcher.auth.ElyByOAuth;
 import by.agro.launcher.core.Downloader;
+import by.agro.launcher.core.Json;
 import by.agro.launcher.core.LauncherPaths;
 import by.agro.launcher.core.ProgressListener;
 import by.agro.launcher.core.Settings;
@@ -29,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
@@ -137,7 +139,7 @@ public final class GameLauncher {
 
         
         Files.createDirectories(options.gameDir.resolve("mods"));
-        linkSharedResourcePacks(options.gameDir);
+        ensureInstanceResourceFolders(options.gameDir);
 
         List<String> command = commandBuilder.build(options);
         listener.onProgress(Strings.get("progress.done"), 1, 1, Strings.get("progress.commandReady"));
@@ -178,8 +180,15 @@ public final class GameLauncher {
         if (gameEnvironment != null && !gameEnvironment.isEmpty()) {
             listener.onMessage(Strings.get("launch.envApplied", String.join(", ", gameEnvironment.keySet())));
         }
+        long startedAt = System.currentTimeMillis();
+        java.util.function.IntConsumer exitHandler = exitCode -> {
+            recordPlayTime(gameDir, System.currentTimeMillis() - startedAt);
+            if (onExit != null) {
+                onExit.accept(exitCode);
+            }
+        };
         try {
-            return GameProcess.start(command, gameDir, onLine, onExit, session, gameEnvironment);
+            return GameProcess.start(command, gameDir, onLine, exitHandler, session, gameEnvironment);
         } catch (IOException e) {
             session.close();
             throw e;
@@ -276,79 +285,139 @@ public final class GameLauncher {
         }
     }
 
-    private void linkSharedResourcePacks(Path gameDir) {
-        linkSharedFolder(gameDir, "resourcepacks");
-        linkSharedFolder(gameDir, "shaderpacks");
+    public void ensureInstanceResourceFolders(Path gameDir) {
+        ensureInstanceFolder(gameDir, "resourcepacks");
+        ensureInstanceFolder(gameDir, "shaderpacks");
     }
-
-    private void linkSharedFolder(Path gameDir, String name) {
+    private void ensureInstanceFolder(Path gameDir, String name) {
         if (gameDir == null) {
             return;
         }
-        Path shared = paths.gameDir().resolve(name);
-        Path link = gameDir.resolve(name);
+        Path folder = gameDir.toAbsolutePath().normalize().resolve(name);
+        Path shared = paths.gameDir().toAbsolutePath().normalize().resolve(name);
         try {
-            if (Files.isSymbolicLink(link)) {
+            if (folder.equals(shared)) {
+                Files.createDirectories(folder);
                 return;
             }
-            if (!Files.exists(link, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
-                Files.createDirectories(shared);
-                createDirectoryLink(link, shared);
+            if (isLinkToShared(folder, shared)) {
+                detachSharedLink(folder, shared);
                 return;
             }
-            if (!Files.isDirectory(link)) {
-                return;
+            if (!Files.exists(folder, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                Files.createDirectories(folder);
             }
-            if (Files.isSameFile(link, shared)) {
-                return;
-            }
-            migrateToShared(link, shared);
-        } catch (IOException | UnsupportedOperationException ignored) {
-
+        } catch (IOException | RuntimeException ignored) {
         }
     }
 
-    private void migrateToShared(Path instanceDir, Path shared) throws IOException {
-        Files.createDirectories(shared);
-        try (var files = Files.list(instanceDir)) {
-            for (Path file : files.toList()) {
-                Path target = shared.resolve(file.getFileName());
-                if (Files.exists(target) && Files.isSameFile(file, target)) {
-                    continue;
+    private static boolean isLinkToShared(Path folder, Path shared) throws IOException {
+        if (!Files.exists(folder) || !Files.isDirectory(shared)) {
+            return false;
+        }
+        boolean link = Files.isSymbolicLink(folder);
+        if (!link) {
+            Path parent = folder.getParent();
+            link = parent != null && !folder.toRealPath().equals(parent.toRealPath().resolve(folder.getFileName()));
+        }
+        return link && Files.isSameFile(folder, shared);
+    }
+
+    private static void detachSharedLink(Path link, Path shared) throws IOException {
+        Path staging = link.resolveSibling("." + link.getFileName() + "-detach-" + java.util.UUID.randomUUID());
+        try {
+            copyTree(shared, staging);
+        } catch (IOException | RuntimeException e) {
+            deleteTreeNoFollow(staging);
+            throw e;
+        }
+        try {
+            Files.delete(link);
+        } catch (IOException | RuntimeException e) {
+            deleteTreeNoFollow(staging);
+            throw e;
+        }
+        Files.move(staging, link);
+    }
+
+    private static void copyTree(Path source, Path target) throws IOException {
+        Files.createDirectories(target);
+        Files.walkFileTree(source, new java.nio.file.SimpleFileVisitor<>() {
+            @Override
+            public java.nio.file.FileVisitResult preVisitDirectory(Path dir,
+                    java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
+                if (!dir.equals(source) && (attrs.isSymbolicLink() || attrs.isOther())) {
+                    return java.nio.file.FileVisitResult.SKIP_SUBTREE;
                 }
-                Files.move(file, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                Files.createDirectories(target.resolve(source.relativize(dir).toString()));
+                return java.nio.file.FileVisitResult.CONTINUE;
             }
-        }
-        try (var files = Files.list(instanceDir)) {
-            if (files.findAny().isPresent()) {
-                return;
+
+            @Override
+            public java.nio.file.FileVisitResult visitFile(Path file,
+                    java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
+                if (attrs.isRegularFile()) {
+                    Files.copy(file, target.resolve(source.relativize(file).toString()),
+                            java.nio.file.StandardCopyOption.COPY_ATTRIBUTES);
+                }
+                return java.nio.file.FileVisitResult.CONTINUE;
             }
-        }
-        Files.delete(instanceDir);
-        createDirectoryLink(instanceDir, shared);
+        });
     }
 
-    private void createDirectoryLink(Path link, Path target) throws IOException {
-        try {
-            Files.createSymbolicLink(link, target.toAbsolutePath());
+    private static void deleteTreeNoFollow(Path root) throws IOException {
+        if (!Files.exists(root, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
             return;
-        } catch (IOException | UnsupportedOperationException unsupported) {
-            if (!by.agro.launcher.core.Platform.isWindows()) {
-                return;
+        }
+        Files.walkFileTree(root, new java.nio.file.SimpleFileVisitor<>() {
+            @Override
+            public java.nio.file.FileVisitResult visitFile(Path file,
+                    java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
+                Files.deleteIfExists(file);
+                return java.nio.file.FileVisitResult.CONTINUE;
             }
+
+            @Override
+            public java.nio.file.FileVisitResult postVisitDirectory(Path dir, IOException error)
+                    throws IOException {
+                Files.deleteIfExists(dir);
+                return java.nio.file.FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    public static final class PlaytimeMarker {
+        public long totalMs;
+
+        public PlaytimeMarker() {
+        }
+
+        public PlaytimeMarker(long totalMs) {
+            this.totalMs = totalMs;
+        }
+    }
+
+    public synchronized void recordPlayTime(Path gameDir, long sessionMs) {
+        if (gameDir == null || sessionMs <= 0) {
+            return;
+        }
+        try {
+            Path marker = gameDir.resolve(".agrolauncher-playtime.json");
+            PlaytimeMarker playtime = Files.exists(marker)
+                    ? Json.read(marker, PlaytimeMarker.class) : null;
+            if (playtime == null) {
+                playtime = new PlaytimeMarker();
+            }
+            playtime.totalMs += sessionMs;
+            Path temporary = by.agro.launcher.core.SecureFiles.createSiblingTemp(marker, ".tmp");
             try {
-                Process process = new ProcessBuilder("cmd.exe", "/c", "mklink", "/J",
-                        link.toAbsolutePath().toString(),
-                        target.toAbsolutePath().toString())
-                        .redirectErrorStream(true)
-                        .start();
-                process.getInputStream().readAllBytes();
-                if (!process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
-                    process.destroyForcibly();
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                Json.write(temporary, playtime);
+                by.agro.launcher.core.SecureFiles.atomicReplace(temporary, marker);
+            } finally {
+                Files.deleteIfExists(temporary);
             }
+        } catch (IOException | RuntimeException ignored) {
+
         }
     }
 
@@ -425,6 +494,33 @@ public final class GameLauncher {
 
         listener.onMessage(Strings.get("progress.librariesCount", tasks.size()));
         downloader.downloadAll(tasks, Strings.get("progress.libraries"), listener);
+    }
+
+    public VanillaInstall ensureVanillaInstalled(String versionId, VersionManifest manifest,
+                                                 ProgressListener listener) throws IOException {
+        paths.ensureDirectories();
+        listener.onMessage(Strings.get("progress.versionPrepare", versionId));
+        boolean offline = settings.offlineMode;
+        ResolvedVersion version = resolver.resolve(versionId, manifest, listener, offline);
+        if (offline) {
+            verifyLocalInstallation(version);
+        } else {
+            downloadClientJar(version, listener);
+            downloadLibraries(version, listener);
+            assetManager.downloadAssets(version, listener);
+        }
+        listener.onProgress(Strings.get("progress.javaCheck"), 0, 1,
+                Strings.get("progress.javaRequired", version.javaMajorVersion));
+        JavaSelection java = javaManager.selectJava(version.javaMajorVersion, listener, offline);
+        return new VanillaInstall(version, java);
+    }
+
+    public Map<String, String> userEnvironment() {
+        Map<String, String> environment = gameEnvironment();
+        return environment == null ? Map.of() : environment;
+    }
+
+    public record VanillaInstall(ResolvedVersion version, JavaSelection java) {
     }
 
     private record PreparedLaunch(List<String> command, JavaSelection javaSelection) {

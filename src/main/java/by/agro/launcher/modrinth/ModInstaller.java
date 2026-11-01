@@ -65,6 +65,9 @@ public final class ModInstaller {
 
     public Result install(ModrinthVersion version, String projectType, String loader, String gameVersion,
                           boolean withDependencies, ProgressListener listener) throws IOException {
+        if ("horizon".equals(loader) && !"resourcepack".equals(projectType)) {
+            throw new IOException(by.agro.launcher.i18n.Strings.get("horizon.noJavaMods"));
+        }
         Result result = new Result();
         Set<String> visited = new HashSet<>();
         Path destination = destinationFor(projectType);
@@ -136,7 +139,7 @@ public final class ModInstaller {
     }
 
     private void downloadPending(List<ModrinthVersion> pending, Path destination, Result result,
-                                 ProgressListener listener) {
+                                 ProgressListener listener) throws IOException {
         if (pending.isEmpty()) {
             return;
         }
@@ -156,10 +159,16 @@ public final class ModInstaller {
             }
         } finally {
             pool.shutdown();
+            boolean finished;
             try {
-                pool.awaitTermination(10, java.util.concurrent.TimeUnit.MINUTES);
+                finished = pool.awaitTermination(10, java.util.concurrent.TimeUnit.MINUTES);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                finished = false;
+            }
+            if (!finished) {
+                pool.shutdownNow();
+                throw new IOException("Mod installation timed out");
             }
         }
     }
@@ -190,8 +199,8 @@ public final class ModInstaller {
     private Path destinationFor(String projectType) {
         return switch (projectType) {
             case "mod" -> gameDir.resolve("mods");
-            case "resourcepack" -> paths.gameDir().resolve("resourcepacks");
-            case "shader" -> paths.gameDir().resolve("shaderpacks");
+            case "resourcepack" -> gameDir.resolve("resourcepacks");
+            case "shader" -> gameDir.resolve("shaderpacks");
             default -> throw new IllegalArgumentException(
                     "Unknown Modrinth project type: " + projectType);
         };

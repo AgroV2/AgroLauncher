@@ -33,6 +33,8 @@ public final class Settings {
     public boolean updateAutoCheck = true;
 
     public String quickPlayServer = "";
+    public String gameDataPath = "";
+    public String downloadHostAllowList = "";
 
     
     public String selectedVersion = "";
@@ -232,6 +234,8 @@ public final class Settings {
         if (proxyPort <= 0 || proxyPort > 65535) proxyPort = 8080;
         if (quickPlayServer == null) quickPlayServer = "";
         if (extraEnvVars == null) extraEnvVars = "";
+        if (gameDataPath == null) gameDataPath = "";
+        if (downloadHostAllowList == null) downloadHostAllowList = "";
         if (elyOAuthCallbackPort < 0 || elyOAuthCallbackPort > 65535) elyOAuthCallbackPort = 0;
         if (elyOAuthTimeoutSeconds <= 0) elyOAuthTimeoutSeconds = 180;
         if (elySkinUrlTemplate == null) elySkinUrlTemplate = "";

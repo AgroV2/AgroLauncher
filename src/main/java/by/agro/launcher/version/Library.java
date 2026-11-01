@@ -188,9 +188,30 @@ public final class Library {
     public String relativePath() {
         Artifact resolved = resolveArtifact();
         if (resolved != null && resolved.path != null && !resolved.path.isBlank()) {
-            return resolved.path;
+            return safeRelativePath(resolved.path);
         }
         return LauncherPaths.mavenToRelativePath(name);
+    }
+
+    private static String safeRelativePath(String value) {
+        if (value.indexOf(':') >= 0 || value.indexOf('\\') >= 0) {
+            throw new IllegalArgumentException("Unsafe library path: " + value);
+        }
+        java.nio.file.Path relative;
+        try {
+            relative = java.nio.file.Path.of(value);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Unsafe library path: " + value, e);
+        }
+        if (relative.isAbsolute()) {
+            throw new IllegalArgumentException("Absolute library path is forbidden: " + value);
+        }
+        java.nio.file.Path normalized = relative.normalize();
+        if (normalized.isAbsolute() || normalized.getNameCount() == 0
+                || normalized.startsWith("..")) {
+            throw new IllegalArgumentException("Library path escapes the libraries directory: " + value);
+        }
+        return normalized.toString();
     }
 
     public String groupArtifactKey() {

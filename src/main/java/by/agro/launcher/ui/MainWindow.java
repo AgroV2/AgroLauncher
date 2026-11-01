@@ -69,6 +69,7 @@ public final class MainWindow extends JFrame {
     private JLabel offlineWarningLabel;
     private String currentCard;
     private JLabel versionLabel;
+    private JLabel instanceLabel;
     private final List<SideNavButton> navButtons = new ArrayList<>();
 
     private PlayPanel playPanel;
@@ -133,6 +134,7 @@ public final class MainWindow extends JFrame {
             if (versionLabel != null) {
                 versionLabel.setText(Strings.get("app.version", Main.VERSION));
             }
+            updateInstanceLabel();
             statusLabel.setText(Strings.get("app.ready"));
             rebuildPanels();
         }));
@@ -328,9 +330,46 @@ public final class MainWindow extends JFrame {
         platform.setForeground(AgroTheme.textMuted());
         platform.setAlignmentX(Component.LEFT_ALIGNMENT);
 
+        instanceLabel = new JLabel();
+        instanceLabel.setFont(AgroTheme.font(10));
+        instanceLabel.setForeground(AgroTheme.textMuted());
+        instanceLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        updateInstanceLabel();
+        javax.swing.Timer instanceTimer = new javax.swing.Timer(500, e -> updateInstanceLabel());
+        instanceTimer.start();
+
+        footer.add(instanceLabel);
         footer.add(version);
         footer.add(platform);
         return footer;
+    }
+
+    private void updateInstanceLabel() {
+        if (instanceLabel == null) {
+            return;
+        }
+        String text = currentInstanceText();
+        if (!text.equals(instanceLabel.getText())) {
+            instanceLabel.setText(text);
+            instanceLabel.setToolTipText(text);
+        }
+    }
+
+    private String currentInstanceText() {
+        by.agro.launcher.core.Settings settings = context.settings();
+        String version = settings.selectedVersion;
+        if (version == null || version.isBlank()) {
+            return Strings.get("app.currentInstanceNone");
+        }
+        by.agro.launcher.loaders.LoaderType loader =
+                by.agro.launcher.loaders.LoaderType.fromId(settings.selectedLoader);
+        if (loader == by.agro.launcher.loaders.LoaderType.HORIZON) {
+            return Strings.get("app.currentInstance", "26.3 Rust", "Horizon");
+        }
+        String loaderText = loader == by.agro.launcher.loaders.LoaderType.VANILLA
+                ? Strings.get("app.loaderVanilla")
+                : loader.displayName();
+        return Strings.get("app.currentInstance", version, loaderText);
     }
 
     private SideNavButton navButton(String textKey, NavIcon.Kind iconKind, String card) {
@@ -391,11 +430,14 @@ public final class MainWindow extends JFrame {
             case CARD_PLAY:
                 playPanel.refresh();
                 break;
+            case CARD_VERSIONS:
+                versionsPanel.refreshSelection();
+                break;
             case CARD_INSTANCES:
                 instancesPanel.refresh();
                 break;
             case CARD_MODS:
-                modsPanel.refresh();
+                modsPanel.onShown();
                 break;
             case CARD_SETTINGS:
                 settingsPanel.reload();

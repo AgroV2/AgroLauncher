@@ -64,6 +64,162 @@ public final class MrpackInstaller {
         }
     }
 
+    public Installed installAny(Path file, ProgressListener listener) throws IOException {
+        String firstEntry = firstEntryName(file);
+        if ("manifest.json".equals(firstEntry)) {
+            return installCurseForge(file, listener);
+        }
+        return install(file, listener);
+    }
+
+    private static String firstEntryName(Path archive) {
+        try (ZipFile zip = new ZipFile(archive.toFile())) {
+            var entries = zip.entries();
+            String first = null;
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                if (!entry.isDirectory()) {
+                    first = entry.getName();
+                    break;
+                }
+            }
+            return first;
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    public Installed installCurseForge(Path zipFile, ProgressListener listener) throws IOException {
+        JsonObject manifest;
+        try (ZipFile zip = new ZipFile(zipFile.toFile())) {
+            ZipEntry entry = zip.getEntry("manifest.json");
+            if (entry == null) {
+                throw new IOException("The archive is not a CurseForge modpack: manifest.json is missing");
+            }
+            try (InputStream in = zip.getInputStream(entry)) {
+                manifest = Json.parseObject(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+        String mcVersion = Json.string(Json.object(manifest, "minecraft"), "version", "");
+        if (mcVersion.isBlank()) {
+            throw new IOException("The CurseForge manifest does not specify a Minecraft version");
+        }
+        String name = Json.string(manifest, "name", "CurseForge modpack");
+        String versionId = Json.string(manifest, "version", "");
+        LoaderType loader = LoaderType.VANILLA;
+        String loaderVersion = "";
+        JsonArray modLoaders = manifest.has("modLoaders") && manifest.get("modLoaders").isJsonArray()
+                ? manifest.getAsJsonArray("modLoaders") : null;
+        if (modLoaders != null && !modLoaders.isEmpty() && modLoaders.get(0).isJsonObject()) {
+            String id = Json.string(modLoaders.get(0).getAsJsonObject(), "id", "");
+            int dash = id.indexOf('-');
+            if (dash > 0) {
+                String prefix = id.substring(0, dash).toLowerCase(java.util.Locale.ROOT);
+                loaderVersion = id.substring(dash + 1);
+                switch (prefix) {
+                    case "fabric": loader = LoaderType.FABRIC; break;
+                    case "quilt": loader = LoaderType.QUILT; break;
+                    case "forge": loader = LoaderType.FORGE; break;
+                    case "neoforge": loader = LoaderType.NEOFORGE; break;
+                    default: loaderVersion = ""; break;
+                }
+            }
+        }
+
+        Path gameDir = paths.installationGameDir(mcVersion, loader.id(),
+                loaderVersion.isBlank() ? "default" : loaderVersion);
+        listener.onMessage(name + (versionId.isBlank() ? "" : " " + versionId)
+                + " · Minecraft " + mcVersion + " · CurseForge");
+        Files.createDirectories(gameDir);
+
+        String overridesFolder = Json.string(manifest, "overrides", "overrides");
+        if (overridesFolder.isBlank()) {
+            overridesFolder = "overrides";
+        }
+        copyOverrides(zipFile, gameDir, overridesFolder);
+
+        JsonArray files = manifest.has("files") && manifest.get("files").isJsonArray()
+                ? manifest.getAsJsonArray("files") : new JsonArray();
+        if (files.size() > MAX_PACK_FILES) {
+            throw new IOException("Modpack declares too many files: " + files.size());
+        }
+        int index = 0;
+        int failed = 0;
+        for (JsonElement element : files) {
+            if (!element.isJsonObject()) continue;
+            JsonObject fileEntry = element.getAsJsonObject();
+            long projectId = Json.longValue(fileEntry, "projectID", -1);
+            long fileId = Json.longValue(fileEntry, "fileID", -1);
+            boolean required = fileEntry.has("required")
+                    && !fileEntry.get("required").isJsonNull()
+                    && fileEntry.get("required").getAsBoolean();
+            index++;
+            if (projectId <= 0 || fileId <= 0 || !required) {
+                continue;
+            }
+            listener.onProgress(name, index, files.size(), projectId + "/" + fileId);
+            try {
+                String url = resolveCurseForgeFile(projectId, fileId);
+                String fileName = url.substring(url.lastIndexOf('/') + 1);
+                Path target = safeTarget(gameDir, "mods/" + fileName);
+                downloader.download(url, target, null, 0);
+                try {
+                    Thread.sleep(150L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            } catch (IOException | RuntimeException e) {
+                failed++;
+                listener.onMessage(by.agro.launcher.i18n.Strings.get(
+                        "modpack.cfFileFailed", fileId, projectId));
+            }
+        }
+        if (failed > 0) {
+            listener.onMessage("CurseForge: " + failed + "/" + files.size());
+        }
+
+        JsonObject marker = new JsonObject();
+        marker.addProperty("name", name);
+        marker.addProperty("versionId", versionId);
+        marker.addProperty("minecraftVersion", mcVersion);
+        marker.addProperty("loader", loader.id());
+        marker.addProperty("loaderVersion", loaderVersion);
+        marker.addProperty("source", "curseforge");
+        Json.write(gameDir.resolve(MARKER_FILE), marker);
+        listener.onProgress(name, files.size(), files.size(), "OK");
+        return new Installed(name, versionId, mcVersion, loader, loaderVersion, gameDir);
+    }
+
+    private String resolveCurseForgeFile(long projectId, long fileId) throws IOException {
+        String body = downloader.getString("https://api.cfwidget.com/" + projectId);
+        JsonObject root = Json.parseObject(body);
+        JsonArray filesArray = root.has("files") && root.get("files").isJsonArray()
+                ? root.getAsJsonArray("files") : null;
+        if (filesArray != null) {
+            for (JsonElement element : filesArray) {
+                if (!element.isJsonObject()) continue;
+                JsonObject file = element.getAsJsonObject();
+                if (Json.longValue(file, "id", -1) != fileId) continue;
+                String direct = Json.string(file, "download_url", null);
+                if (direct != null && direct.startsWith("https://")) {
+                    return direct;
+                }
+                String fileName = Json.string(file, "name", null);
+                if (fileName != null && !fileName.isBlank()) {
+                    return forgeCdnUrl(fileId, fileName);
+                }
+            }
+        }
+        throw new IOException("CurseForge file not found on cfwidget: " + fileId);
+    }
+
+    private static String forgeCdnUrl(long fileId, String fileName) {
+        String encoded = java.net.URLEncoder.encode(fileName, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        return "https://media.forgecdn.net/files/" + (fileId / 1000) + "/" + (fileId % 1000)
+                + "/" + encoded;
+    }
+
     public Installed install(Path mrpackFile, ProgressListener listener) throws IOException {
         if (mrpackFile == null || !Files.isRegularFile(mrpackFile)) {
             throw new IOException("Modpack file not found: " + mrpackFile);
@@ -155,6 +311,10 @@ public final class MrpackInstaller {
     }
 
     private void copyOverrides(Path mrpackFile, Path gameDir) throws IOException {
+        copyOverrides(mrpackFile, gameDir, OVERRIDES_PREFIX.substring(0, OVERRIDES_PREFIX.length() - 1));
+    }
+
+    private void copyOverrides(Path mrpackFile, Path gameDir, String overridesFolder) throws IOException {
         try (ZipFile zip = new ZipFile(mrpackFile.toFile())) {
             var entries = zip.entries();
             int entryCount = 0;
@@ -162,10 +322,11 @@ public final class MrpackInstaller {
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 String name = entry.getName();
-                if (entry.isDirectory() || !name.startsWith(OVERRIDES_PREFIX)) {
+                if (entry.isDirectory() || !name.startsWith(overridesFolder + "/")) {
                     continue;
                 }
-                String relative = name.substring(OVERRIDES_PREFIX.length());
+                String prefix = overridesFolder + "/";
+                String relative = name.substring(prefix.length());
                 if (relative.isBlank()) {
                     continue;
                 }

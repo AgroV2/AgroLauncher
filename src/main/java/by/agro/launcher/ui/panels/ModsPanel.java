@@ -56,6 +56,8 @@ public final class ModsPanel extends JPanel {
     private final JComboBox<ModBuildManager.ModBuild> buildsCombo = new JComboBox<>();
     private final JButton deleteBuildButton = UiFactory.dangerButton(Strings.get("builds.delete"));
     private final JLabel pathHintLabel = UiFactory.hint(" ");
+    private final javax.swing.JTextField modSearchField = new javax.swing.JTextField();
+    private final java.util.List<ModManager.ModFile> allMods = new java.util.ArrayList<>();
     private final javax.swing.JProgressBar mrpackProgressBar = new javax.swing.JProgressBar();
     private final JLabel mrpackProgressLabel = new JLabel(" ");
     private final JButton switchModsButton = UiFactory.button(Strings.get("mods.switchTo"));
@@ -135,12 +137,16 @@ public final class ModsPanel extends JPanel {
         tabs.addChangeListener(e -> {
             Component selected = tabs.getSelectedComponent();
             if (selected == browserPanel) {
+                browserPanel.ensureLoaded();
                 browserPanel.refreshFilters();
             } else if (selected == resourcePacksPanel) {
+                resourcePacksPanel.ensureLoaded();
                 resourcePacksPanel.refreshFilters();
             } else if (selected == shadersPanel) {
+                shadersPanel.ensureLoaded();
                 shadersPanel.refreshFilters();
             } else if (selected == modpacksPanel) {
+                modpacksPanel.ensureLoaded();
                 modpacksPanel.refreshFilters();
             } else {
                 refresh();
@@ -235,6 +241,19 @@ public final class ModsPanel extends JPanel {
         texts.add(summaryLabel);
         texts.add(UiFactory.verticalGap(2));
         texts.add(pathHintLabel);
+        modSearchField.putClientProperty("JTextField.placeholderText",
+                Strings.get("mods.searchPlaceholder"));
+        UiFactory.fixHeight(modSearchField, 30);
+        modSearchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { applyModFilter(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { applyModFilter(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { applyModFilter(); }
+        });
+        JPanel searchRow = new JPanel(new BorderLayout());
+        searchRow.setOpaque(false);
+        searchRow.add(modSearchField, BorderLayout.CENTER);
+        texts.add(UiFactory.verticalGap(6));
+        texts.add(searchRow);
         lower.add(texts, BorderLayout.NORTH);
         lower.add(buildMrpackProgressRow(), BorderLayout.CENTER);
         lower.add(actions, BorderLayout.SOUTH);
@@ -245,18 +264,31 @@ public final class ModsPanel extends JPanel {
         return card;
     }
 
+    public void onShown() {
+        refresh();
+        Component selected = tabs.getSelectedComponent();
+        if (selected instanceof ModBrowserPanel panel) {
+            panel.ensureLoaded();
+        }
+    }
+
     public void refresh() {
         applyActiveGameDir();
         model.clear();
         var mods = modManager.list();
-        for (ModManager.ModFile mod : mods) {
-            model.addElement(mod);
-        }
+        allMods.clear();
+        allMods.addAll(mods);
+        applyModFilter();
         long enabled = mods.stream().filter(m -> m.enabled).count();
         summaryLabel.setText(Strings.get("mods.summary", mods.size(), enabled));
 
         LoaderType loader = LoaderType.fromId(context.settings().selectedLoader);
-        if (!loader.supportsMods()) {
+        boolean horizon = loader == LoaderType.HORIZON;
+        for (int index : new int[]{0, 2, 3, 4}) tabs.setEnabledAt(index, !horizon);
+        if (horizon && tabs.getSelectedIndex() != 1) tabs.setSelectedIndex(1);
+        if (horizon) {
+            loaderWarning.setText(Strings.get("horizon.noJavaMods"));
+        } else if (!loader.supportsMods()) {
             loaderWarning.setText(Strings.get("mods.loaderWarning", loader.displayName()));
         } else {
             loaderWarning.setText(" ");
@@ -265,7 +297,7 @@ public final class ModsPanel extends JPanel {
         if (strayMrpack != null && loader.supportsMods()) {
             loaderWarning.setText(Strings.get("mods.mrpackInMods", strayMrpack.getFileName()));
         }
-        modsElsewhere = model.isEmpty() ? findModsElsewhere() : null;
+        modsElsewhere = !horizon && model.isEmpty() ? findModsElsewhere() : null;
         if (modsElsewhere != null) {
             loaderWarning.setText(Strings.get("mods.modsElsewhere", modsElsewhere.description()));
             switchModsButton.setText(Strings.get("mods.switchTo")
@@ -283,7 +315,9 @@ public final class ModsPanel extends JPanel {
                 .filter(build -> build.id.equals(context.settings().selectedModBuildId))
                 .findFirst().orElse(null);
         java.nio.file.Path gameDir;
-        if (active != null) {
+        if (LoaderType.fromId(context.settings().selectedLoader) == LoaderType.HORIZON) {
+            gameDir = context.horizon().instanceDir();
+        } else if (active != null) {
             gameDir = buildManager.gameDir(active);
         } else {
             String minecraft = context.settings().selectedVersion;
@@ -297,6 +331,7 @@ public final class ModsPanel extends JPanel {
                         loader == LoaderType.VANILLA ? "default" : loaderVersion);
             }
         }
+        context.gameLauncher().ensureInstanceResourceFolders(gameDir);
         modManager.setGameDir(gameDir);
         activeGameDir = gameDir;
         pathHintLabel.setText(Strings.get("mods.installedInto", gameDir));
@@ -474,14 +509,23 @@ public final class ModsPanel extends JPanel {
         }.execute();
     }
 
+    private boolean reloadingBuilds;
+
     private void reloadBuilds() {
         String selectedId = context.settings().selectedModBuildId;
-        buildsCombo.removeAllItems();
-        for (ModBuildManager.ModBuild build : buildManager.list()) {
-            buildsCombo.addItem(build);
-            if (build.id.equals(selectedId)) buildsCombo.setSelectedItem(build);
+        reloadingBuilds = true;
+        try {
+            buildsCombo.removeAllItems();
+            ModBuildManager.ModBuild selected = null;
+            for (ModBuildManager.ModBuild build : buildManager.list()) {
+                buildsCombo.addItem(build);
+                if (build.id.equals(selectedId)) selected = build;
+            }
+            buildsCombo.setSelectedItem(selected);
+            deleteBuildButton.setEnabled(selected != null);
+        } finally {
+            reloadingBuilds = false;
         }
-        deleteBuildButton.setEnabled(buildsCombo.getSelectedItem() != null);
     }
 
     private void createBuild() {
@@ -504,6 +548,7 @@ public final class ModsPanel extends JPanel {
     }
 
     private void selectBuild() {
+        if (reloadingBuilds) return;
         ModBuildManager.ModBuild build = (ModBuildManager.ModBuild) buildsCombo.getSelectedItem();
         if (build == null) return;
         context.settings().selectedModBuildId = build.id;
@@ -587,7 +632,8 @@ public final class ModsPanel extends JPanel {
     private void chooseMrpack() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle(Strings.get("mods.importMrpack"));
-        chooser.setFileFilter(new FileNameExtensionFilter("Modrinth modpack (.mrpack)", "mrpack"));
+        chooser.setFileFilter(new FileNameExtensionFilter(
+                Strings.get("mods.modpackFilter"), "mrpack", "zip"));
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
             return;
         }
@@ -615,7 +661,7 @@ public final class ModsPanel extends JPanel {
             @Override
             protected by.agro.launcher.modrinth.MrpackInstaller.Installed doInBackground() throws Exception {
                 return new by.agro.launcher.modrinth.MrpackInstaller(context.paths(), context.downloader())
-                        .install(archive, listener);
+                        .installAny(archive, listener);
             }
 
             @Override
@@ -701,6 +747,16 @@ public final class ModsPanel extends JPanel {
         importMrpack(selected.path);
     }
 
+    private void applyModFilter() {
+        String query = modSearchField.getText().trim().toLowerCase(java.util.Locale.ROOT);
+        model.clear();
+        for (ModManager.ModFile mod : allMods) {
+            if (query.isEmpty() || mod.displayName().toLowerCase(java.util.Locale.ROOT).contains(query)) {
+                model.addElement(mod);
+            }
+        }
+    }
+
     private void applyModpackSelection(by.agro.launcher.modrinth.MrpackInstaller.Installed installed) {
         var settings = context.settings();
         settings.selectedVersion = installed.minecraftVersion;
@@ -756,18 +812,7 @@ public final class ModsPanel extends JPanel {
     }
 
     private void openModsFolder() {
-        try {
-            java.nio.file.Files.createDirectories(modManager.modsDir());
-            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
-                Desktop.getDesktop().open(modManager.modsDir().toFile());
-            } else {
-                JOptionPane.showMessageDialog(this, modManager.modsDir().toString(),
-                        Strings.get("mods.folderTitle"), JOptionPane.INFORMATION_MESSAGE);
-            }
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, Strings.get("mods.openFolderFailed", e.getMessage()),
-                    Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
-        }
+        UiFactory.openInFileManager(this, modManager.modsDir());
     }
 
     private void report(String message) {

@@ -171,13 +171,20 @@ public final class LauncherPaths {
         }
     }
 
+    private static volatile java.nio.file.Path gameDataDirOverride;
+
+    public static void setGameDataDir(java.nio.file.Path directory) {
+        gameDataDirOverride = directory == null ? null
+                : directory.toAbsolutePath().normalize();
+    }
+
     public Path root() {
         return root;
     }
 
 
     public Path gameDir() {
-        return root.resolve("minecraft");
+        return gameDataDirOverride != null ? gameDataDirOverride : root.resolve("minecraft");
     }
 
     public Path versionsDir() {

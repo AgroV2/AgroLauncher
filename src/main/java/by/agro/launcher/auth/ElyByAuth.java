@@ -149,7 +149,12 @@ public final class ElyByAuth {
     }
 
     private static JsonObject post(String path, JsonObject body) throws IOException {
-        HttpURLConnection conn = (HttpURLConnection) URI.create(AUTH_SERVER + path).toURL().openConnection();
+        java.net.URI authUri = URI.create(AUTH_SERVER + path);
+        HttpURLConnection conn = (HttpURLConnection) authUri.toURL()
+                .openConnection(by.agro.launcher.core.Downloader.configuredProxy());
+        if (conn instanceof javax.net.ssl.HttpsURLConnection https) {
+            by.agro.launcher.core.SafeNetwork.pinConnection(https, authUri);
+        }
         conn.setRequestMethod("POST");
         conn.setDoOutput(true);
         conn.setConnectTimeout(TIMEOUT_MS);

@@ -1,8 +1,11 @@
 package by.agro.launcher;
 
 import by.agro.launcher.auth.AccountStorage;
+import by.agro.launcher.horizon.HorizonManager;
+import by.agro.launcher.horizon.HorizonInstaller;
 import by.agro.launcher.core.Downloader;
 import by.agro.launcher.core.LauncherPaths;
+import by.agro.launcher.core.SafeNetwork;
 import by.agro.launcher.core.Settings;
 import by.agro.launcher.jvm.JavaManager;
 import by.agro.launcher.launch.GameLauncher;
@@ -33,6 +36,7 @@ public final class LauncherContext {
     private final GameLauncher gameLauncher;
     private final VersionResolver versionResolver;
     private final RepairService repairService;
+    private final HorizonManager horizon;
     private final Map<LoaderType, LoaderInstaller> installers = new EnumMap<>(LoaderType.class);
 
     private volatile VersionManifest manifest;
@@ -44,16 +48,26 @@ public final class LauncherContext {
 
     public LauncherContext(Settings settings) throws IOException {
         this.paths = LauncherPaths.get();
-        this.paths.ensureDirectories();
         this.settings = settings != null ? settings : Settings.load();
+        if (this.settings.gameDataPath != null && !this.settings.gameDataPath.isBlank()) {
+            java.nio.file.Path custom = java.nio.file.Path.of(this.settings.gameDataPath.trim());
+            if (custom.isAbsolute()) {
+                LauncherPaths.setGameDataDir(custom);
+            }
+        }
+        this.paths.ensureDirectories();
         this.downloader = new Downloader(this.settings.downloadParallelism);
         Downloader.configureProxy(this.settings.proxyMode, this.settings.proxyHost, this.settings.proxyPort);
+        SafeNetwork.configureAllowedDownloadHosts(this.settings.downloadHostAllowList);
+        Downloader.setVerificationCacheFile(paths.cacheDir().resolve("download-verification.json"));
         this.accounts = new AccountStorage(paths);
         this.javaManager = new JavaManager(paths, downloader, settings);
         this.gameLauncher = new GameLauncher(paths, downloader, settings, javaManager, accounts);
         this.versionResolver = gameLauncher.resolver();
         this.repairService = new RepairService(paths, downloader);
+        this.horizon = new HorizonManager(paths, downloader, this.settings, gameLauncher);
 
+        installers.put(LoaderType.HORIZON, new HorizonInstaller(horizon));
         installers.put(LoaderType.FABRIC, new FabricInstaller(paths, downloader, settings));
         installers.put(LoaderType.QUILT, new QuiltInstaller(paths, downloader, settings));
         installers.put(LoaderType.FORGE, new ForgeInstaller(paths, downloader, javaManager, settings));
@@ -96,6 +110,8 @@ public final class LauncherContext {
     public LoaderInstaller installer(LoaderType type) {
         return installers.get(type);
     }
+
+    public HorizonManager horizon() { return horizon; }
 
     public OptiFineInstaller optiFineInstaller() {
         return (OptiFineInstaller) installers.get(LoaderType.OPTIFINE);

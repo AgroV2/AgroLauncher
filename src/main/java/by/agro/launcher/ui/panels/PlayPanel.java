@@ -270,12 +270,14 @@ public final class PlayPanel extends JPanel {
     public void refresh() {
         SwingUtilities.invokeLater(() -> {
             String version = context.settings().selectedVersion;
-            versionLabel.setText(version == null || version.isBlank() ? Strings.get("play.versionNotSelected") : version);
+            versionLabel.setText("horizon".equals(context.settings().selectedLoader)
+                    ? by.agro.launcher.horizon.HorizonManager.INSTANCE_NAME
+                    : version == null || version.isBlank() ? Strings.get("play.versionNotSelected") : version);
 
             LoaderType loader = LoaderType.fromId(context.settings().selectedLoader);
             String loaderVersion = context.settings().selectedLoaderVersion;
-            loaderLabel.setText(loader == LoaderType.VANILLA
-                    ? Strings.get("play.noMods")
+            loaderLabel.setText(loader == LoaderType.HORIZON ? Strings.get("horizon.nativeEngine")
+                    : loader == LoaderType.VANILLA ? Strings.get("play.noMods")
                     : loader.displayName() + (loaderVersion.isBlank() ? "" : " " + loaderVersion));
 
             Account account = activeAccount();
@@ -306,7 +308,8 @@ public final class PlayPanel extends JPanel {
 
             boolean versionReady = version != null && !version.isBlank();
             playButton.setEnabled(versionReady && account != null && runningProcess == null);
-            repairButton.setEnabled(versionReady && runningProcess == null && !repairRunning);
+            repairButton.setEnabled(versionReady && loader != LoaderType.HORIZON && runningProcess == null && !repairRunning);
+            repairButton.setToolTipText(loader == LoaderType.HORIZON ? Strings.get("horizon.repairHint") : null);
         });
     }
 
@@ -413,6 +416,13 @@ public final class PlayPanel extends JPanel {
             @Override
             protected GameProcess doInBackground() throws Exception {
                 String effectiveVersion = resolveVersionDynamically ? resolveLatestRelease() : requestedVersion;
+                if (loaderType == LoaderType.HORIZON) {
+                    if (!by.agro.launcher.horizon.HorizonManager.MINECRAFT_VERSION.equals(effectiveVersion)) {
+                        throw new java.io.IOException(Strings.get("horizon.onlyVersion"));
+                    }
+                    return context.horizon().launch(account, context.manifestIfLoaded(), listener, console::append,
+                            code -> SwingUtilities.invokeLater(() -> onGameExit(code)), quickPlayServer);
+                }
                 String versionToLaunch = loaderType == LoaderType.VANILLA
                         ? effectiveVersion
                         : installLoaderIfNeeded(effectiveVersion, listener);
@@ -572,6 +582,7 @@ public final class PlayPanel extends JPanel {
     }
 
     private java.nio.file.Path isolatedGameDir(String mcVersion, LoaderType loaderType) {
+        if (loaderType == LoaderType.HORIZON) return context.horizon().instanceDir();
         String loaderVersion = context.settings().selectedLoaderVersion;
         if (loaderVersion == null || loaderVersion.isBlank()) {
             loaderVersion = "recommended";

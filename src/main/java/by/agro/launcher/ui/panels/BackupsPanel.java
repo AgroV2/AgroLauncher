@@ -178,6 +178,9 @@ public final class BackupsPanel extends JPanel {
     }
 
     private Path currentGameDir() {
+        if (LoaderType.fromId(context.settings().selectedLoader) == LoaderType.HORIZON) {
+            return context.horizon().instanceDir();
+        }
         ModBuildManager buildManager = new ModBuildManager(context.paths());
         ModBuildManager.ModBuild activeBuild = buildManager.list().stream()
                 .filter(build -> build.id.equals(context.settings().selectedModBuildId))
@@ -200,19 +203,7 @@ public final class BackupsPanel extends JPanel {
 
     private void openBackupsFolder() {
         Path root = context.paths().root().resolve("backups");
-        try {
-            Files.createDirectories(root);
-            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
-                Desktop.getDesktop().open(root.toFile());
-            } else {
-                JOptionPane.showMessageDialog(this, root.toString(),
-                        Strings.get("settings.folderPath"), JOptionPane.INFORMATION_MESSAGE);
-            }
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this,
-                    Strings.get("mods.openFolderFailed", e.getMessage()),
-                    Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
-        }
+        UiFactory.openInFileManager(this, root);
     }
 
     private void report(String message) {

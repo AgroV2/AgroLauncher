@@ -53,6 +53,53 @@ public final class UiFactory {
         return label;
     }
 
+    public static void openInFileManager(java.awt.Component parent, java.nio.file.Path path) {
+        try {
+            java.nio.file.Files.createDirectories(path);
+        } catch (java.io.IOException e) {
+            showOpenError(parent, e.getMessage());
+            return;
+        }
+        Exception failure = null;
+        try {
+            if (java.awt.Desktop.isDesktopSupported()
+                    && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.OPEN)) {
+                java.awt.Desktop.getDesktop().open(path.toFile());
+                return;
+            }
+        } catch (Exception e) {
+            failure = e;
+        }
+        try {
+            String command;
+            if (by.agro.launcher.core.Platform.isWindows()) {
+                command = "explorer.exe";
+            } else if (by.agro.launcher.core.Platform.isOsx()) {
+                command = "open";
+            } else {
+                command = "xdg-open";
+            }
+            new ProcessBuilder(command, path.toAbsolutePath().toString())
+                    .redirectErrorStream(true)
+                    .start();
+            return;
+        } catch (java.io.IOException e) {
+            if (failure != null) {
+                failure.addSuppressed(e);
+            } else {
+                failure = e;
+            }
+        }
+        showOpenError(parent, failure == null ? path.toString() : failure.getMessage());
+    }
+
+    private static void showOpenError(java.awt.Component parent, String message) {
+        javax.swing.JOptionPane.showMessageDialog(parent,
+                by.agro.launcher.i18n.Strings.get("mods.openFolderFailed", message),
+                by.agro.launcher.i18n.Strings.get("common.error"),
+                javax.swing.JOptionPane.WARNING_MESSAGE);
+    }
+
     public static JPanel card() {
         JPanel panel = new TranslucentCard();
         panel.setBorder(BorderFactory.createEmptyBorder(18, 20, 18, 20));

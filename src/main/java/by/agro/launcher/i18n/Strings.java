@@ -27,6 +27,67 @@ public final class Strings {
         put("app.ready", "Готов к работе", "Ready");
         put("app.version", "версия {0}", "version {0}");
 
+        put("app.currentInstance", "Текущий инстанс: {0} - {1}", "Current instance: {0} - {1}");
+        put("app.currentInstanceNone", "Текущий инстанс: не выбран", "Current instance: none selected");
+        put("app.loaderVanilla", "ванилла", "vanilla");
+
+        put("horizon.standaloneVersion", "Horizon , отдельная Rust-версия", "Horizon , standalone Rust version");
+        put("horizon.nativeEngine", "Нативный клиент Horizon", "Native Horizon client");
+        put("horizon.offlineVersionList", "26.3 Rust доступна в списке; первая установка требует сети.",
+                "26.3 Rust is listed; the first installation requires a connection.");
+        put("horizon.platformUnsupported", "Horizon не поддерживает эту платформу: {0} / {1}",
+                "Horizon does not support this platform: {0} / {1}");
+        put("horizon.notInstalledOffline", "Horizon ещё не установлен. Для первой установки отключите офлайн-режим.",
+                "Horizon is not installed. Go online for the first installation.");
+        put("horizon.checking", "Проверка подписанного релиза Horizon…",
+                "Checking the signed Horizon release…");
+        put("horizon.cachedBuild", "Сеть недоступна, используем установленный Horizon: {0}",
+                "Network unavailable; using installed Horizon: {0}");
+        put("horizon.badSignature", "Неверная подпись релиза Horizon. Установка остановлена.",
+                "Invalid Horizon release signature. Installation stopped.");
+        put("horizon.missingArchive", "В подписанном релизе нет архива {0}",
+                "Archive {0} is missing from the signed release");
+        put("horizon.damagedBuild", "Установка Horizon повреждена: {0}. Переименуйте этот каталог и повторите запуск.",
+                "Horizon installation is damaged: {0}. Rename that directory and try again.");
+        put("horizon.downloading", "Скачивание Horizon {0}…",
+                "Downloading Horizon {0}…");
+        put("horizon.extracting", "Распаковка Horizon…",
+                "Extracting Horizon…");
+        put("horizon.invalidArchive", "Архив Horizon не содержит клиента и подготовщика ресурсов.",
+                "Horizon archive has no client and resource preparer.");
+        put("horizon.incompatibleBuild", "Эта сборка Horizon несовместима с интеграцией 26.3 Rust.",
+                "This Horizon build is incompatible with the 26.3 Rust integration.");
+        put("horizon.reusing", "Копирование совместимых ресурсов предыдущей сборки Horizon…",
+                "Copying compatible resources from a previous Horizon build…");
+        put("horizon.minecraftMismatch", "Файлы Minecraft не соответствуют закреплённой версии Horizon.",
+                "Minecraft files do not match the version pinned by Horizon.");
+        put("horizon.serverMissingOffline", "Для подготовки Horizon отсутствует проверенный серверный JAR. Нужна первая установка с сетью.",
+                "The verified server JAR needed by Horizon is missing. Prepare it online first.");
+        put("horizon.serverDownload", "Загрузка серверного JAR Minecraft для подготовки ресурсов…",
+                "Downloading the Minecraft server JAR for resource preparation…");
+        put("horizon.preparing", "Подготовка ресурсов Horizon (первый запуск может занять несколько минут)…",
+                "Preparing Horizon resources (the first launch may take several minutes)…");
+        put("horizon.resourcesIncomplete", "Подготовка Horizon не создала все необходимые ресурсы.",
+                "Horizon preparation did not produce all required resources.");
+        put("horizon.prepareFailed", "Подготовка Horizon завершилась с кодом {0}",
+                "Horizon preparation exited with code {0}");
+        put("horizon.interrupted", "Подготовка Horizon прервана.",
+                "Horizon preparation was interrupted.");
+        put("horizon.offlineNotice", "26.3 Rust: используется только ник, без сессии и токенов. Только offline-серверы; Java-моды и шейдеры несовместимы.",
+                "26.3 Rust: nickname only, no session or tokens. Offline servers only; Java mods and shaders are incompatible.");
+        put("horizon.onlyVersion", "Horizon поддерживается только для Minecraft 26.3.",
+                "Horizon is supported only for Minecraft 26.3.");
+        put("horizon.repairHint", "Repair для Java-инстансов здесь недоступен. Файлы Horizon проверяются при установке.",
+                "Java instance repair is unavailable here. Horizon downloads are verified during installation.");
+        put("horizon.instanceHint", "Отдельный инстанс 26.3 Rust (Horizon). Установка начнётся при запуске.",
+                "Separate 26.3 Rust (Horizon) instance. Installation starts on launch.");
+        put("horizon.noJavaMods", "Horizon , Rust-клиент: Java-моды, шейдеры и Java-модпаки не поддерживаются.",
+                "Horizon is a Rust client: Java mods, shaders and Java modpacks are unsupported.");
+        put("horizon.credits", "Horizon , Ludovic Marie и участники Horizon, © 2026, MIT. Minecraft , Mojang; файлы загружаются отдельно.",
+                "Horizon , Ludovic Marie and the Horizon contributors, © 2026, MIT. Minecraft , Mojang; game files are downloaded separately.");
+        put("horizon.license", "Лицензия Horizon (MIT)",
+                "Horizon license (MIT)");
+
         put("common.ok", "ОК", "OK");
         put("common.cancel", "Отмена", "Cancel");
         put("common.close", "Закрыть", "Close");
@@ -176,8 +237,8 @@ public final class Strings {
         put("versions.notSupported", "{0} не поддерживает {1}", "{0} does not support {1}");
         put("versions.loadFailed", "Не удалось загрузить список версий: {0}",
                 "Failed to load version list: {0}");
-        put("versions.offlineList", "Показаны установленные версии ({0}) — список Mojang недоступен",
-                "Showing installed versions ({0}) — Mojang list unavailable");
+        put("versions.offlineList", "Показаны установленные версии ({0}) , список Mojang недоступен",
+                "Showing installed versions ({0}) , Mojang list unavailable");
         put("versions.noVersions", "Список версий недоступен: нет соединения и нет установленных версий",
                 "No versions available: no connection and nothing installed");
         put("versions.loaderUnavailable", "Загрузчик недоступен", "Loader unavailable");
@@ -246,8 +307,8 @@ public final class Strings {
                 "CurseForge does not allow catalog access without a developer key, so the site "
                         + "opens in an external browser. Add downloaded files with the Add files button.");
         put("mods.curseForgeOpened",
-                "CurseForge открыт в браузере — скачанные файлы добавьте кнопкой «Добавить файлы»",
-                "CurseForge opened in browser — add downloaded files with the Add files button");
+                "CurseForge открыт в браузере , скачанные файлы добавьте кнопкой «Добавить файлы»",
+                "CurseForge opened in browser , add downloaded files with the Add files button");
         put("mods.addFiles", "Добавить файлы", "Add files");
         put("mods.toggle", "Включить / отключить", "Enable / disable");
         put("mods.chooseFiles", "Выберите файлы модов", "Choose mod files");
@@ -263,8 +324,8 @@ public final class Strings {
         put("mods.enabled", "включён", "enabled");
         put("mods.disabled", "отключён", "disabled");
         put("mods.loaderWarning",
-                "Выбран {0} — моды не будут загружены. Выберите Fabric, Forge, Quilt или NeoForge.",
-                "{0} is selected — mods will not load. Choose Fabric, Forge, Quilt or NeoForge.");
+                "Выбран {0} , моды не будут загружены. Выберите Fabric, Forge, Quilt или NeoForge.",
+                "{0} is selected , mods will not load. Choose Fabric, Forge, Quilt or NeoForge.");
         put("mods.folderTitle", "Папка модов", "Mods folder");
         put("mods.openFolderFailed", "Не удалось открыть папку: {0}", "Failed to open folder: {0}");
         put("mods.openBrowserFailed", "Не удалось открыть браузер: {0}", "Failed to open browser: {0}");
@@ -313,14 +374,14 @@ public final class Strings {
         put("browser.allCategories", "Все категории", "All categories");
         put("browser.loadMore", "Показать ещё", "Load more");
         put("browser.loadingCatalog", "Загрузка каталога…", "Loading catalog…");
-        put("browser.nothingFound", "Ничего не найдено — измените запрос или фильтры",
-                "Nothing found — change your query or filters");
+        put("browser.nothingFound", "Ничего не найдено , измените запрос или фильтры",
+                "Nothing found , change your query or filters");
         put("browser.shown", "Показано {0} из {1}", "Showing {0} of {1}");
         put("browser.loadFailed", "Не удалось загрузить каталог: {0}", "Failed to load catalog: {0}");
         put("browser.unavailable", "Каталог модов недоступен: {0}", "Mod catalog unavailable: {0}");
         put("browser.filterByProfile", "Фильтр по профилю: ", "Profile filter: ");
-        put("browser.filterNotSet", "не задан — выберите версию и загрузчик на вкладке «Версии»",
-                "not set — choose a version and loader on the Versions tab");
+        put("browser.filterNotSet", "не задан , выберите версию и загрузчик на вкладке «Версии»",
+                "not set , choose a version and loader on the Versions tab");
         put("browser.anyLoader", "любой загрузчик", "any loader");
         put("browser.anyVersion", "любая версия", "any version");
         put("browser.byAuthor", "от {0}", "by {0}");
@@ -354,8 +415,8 @@ public final class Strings {
         put("modDialog.installing.resourcepack", "Установка ресурспака…", "Installing resource pack…");
         put("modDialog.installing.shader", "Установка шейдера…", "Installing shader…");
         put("modDialog.requiresDeps", "Требует зависимостей: {0}", "Requires dependencies: {0}");
-        put("modDialog.depsWillInstall", " — будут установлены", " — will be installed");
-        put("modDialog.depsDisabled", " — установка отключена", " — installation disabled");
+        put("modDialog.depsWillInstall", " , будут установлены", " , will be installed");
+        put("modDialog.depsDisabled", " , установка отключена", " , installation disabled");
         put("modDialog.browserFailed", "Не удалось открыть браузер: {0}", "Failed to open browser: {0}");
 
         put("install.alreadyInstalled", "Уже установлен: {0}", "Already installed: {0}");
@@ -413,12 +474,12 @@ public final class Strings {
         put("settings.memory", "Оперативная память", "Memory");
         put("settings.maxRam", "Выделено игре (-Xmx)", "Allocated to the game (-Xmx)");
         put("settings.minRam", "Начальный размер (-Xms), МБ", "Initial size (-Xms), MB");
-        put("settings.minRamHint", "0 — не задавать", "0 — do not set");
+        put("settings.minRamHint", "0 , не задавать", "0 , do not set");
         put("settings.ramAllocated", "Выделено памяти: {0}", "Memory allocated: {0}");
         put("settings.ramTotal", "всего в системе: {0}", "system total: {0}");
         put("settings.ramUnknown", "объём памяти определить не удалось", "could not detect system memory");
-        put("settings.ramTooMuch", "Слишком много — системе может не хватить памяти",
-                "Too much — the system may run out of memory");
+        put("settings.ramTooMuch", "Слишком много , системе может не хватить памяти",
+                "Too much , the system may run out of memory");
         put("settings.ramTooLittle", "Для версий 1.18+ с модами рекомендуется от 4 ГБ",
                 "For 1.18+ with mods, 4 GB or more is recommended");
 
@@ -441,8 +502,8 @@ public final class Strings {
         put("settings.javaVersionDetected", "Определена Java {0}", "Detected Java {0}");
         put("settings.javaVersionUnknown", "Не удалось определить версию Java",
                 "Could not determine the Java version");
-        put("settings.javaNone", "Java не найдена — скачайте нужную версию",
-                "No Java found — download a version");
+        put("settings.javaNone", "Java не найдена , скачайте нужную версию",
+                "No Java found , download a version");
         put("settings.javaDownloading", "Загрузка Java {0}…", "Downloading Java {0}…");
         put("settings.javaInstalled", "Java {0} установлена", "Java {0} installed");
         put("settings.javaReady", "Java {0} готова: {1}", "Java {0} ready: {1}");
@@ -536,8 +597,8 @@ public final class Strings {
         put("appearance.backgroundLoaded", "Фон загружен", "Background loaded");
         put("appearance.backgroundGif", " (GIF)", " (GIF)");
         put("appearance.backgroundGifBlur",
-                " — при размытии показывается первый кадр без анимации",
-                " — blur shows the first frame without animation");
+                " , при размытии показывается первый кадр без анимации",
+                " , blur shows the first frame without animation");
         put("appearance.backgroundFailed", "Не удалось загрузить изображение", "Failed to load the image");
         put("appearance.backgroundRemoved", "Фоновое изображение убрано", "Background image removed");
         put("appearance.blur", "Размыть фон", "Blur background");
@@ -632,15 +693,15 @@ public final class Strings {
         put("forge.stageDownloadInstaller", "загрузка установщика", "downloading the installer");
         put("forge.stageRunInstaller", "запуск установщика", "running the installer");
         put("forge.stageFindProfile", "поиск профиля", "locating the profile");
-        put("forge.processorRetry", "Промежуточные файлы не совпали с эталоном — очищаем и повторяем",
+        put("forge.processorRetry", "Промежуточные файлы не совпали с эталоном , очищаем и повторяем",
                 "Intermediate files failed verification; cleaning up and retrying");
         put("forge.profileVerified", "Профиль установлен и проверен: {0}", "Profile installed and verified: {0}");
         put("forge.profileSelected", "Generated profile выбран: {0}", "Generated profile selected: {0}");
         put("forge.markerInvalid", "Marker установки недействителен: {0}", "Installation marker is invalid: {0}");
         put("forge.checkingVanilla", "Проверка ванильного клиента", "Verifying the vanilla client");
-        put("forge.vanillaCheckSkipped", "Список версий недоступен — проверка ванильного клиента пропущена",
+        put("forge.vanillaCheckSkipped", "Список версий недоступен , проверка ванильного клиента пропущена",
                 "Version manifest unavailable; skipping the vanilla client check");
-        put("forge.vanillaBroken", "Ванильный {0}.jar повреждён или изменён — скачиваем заново",
+        put("forge.vanillaBroken", "Ванильный {0}.jar повреждён или изменён , скачиваем заново",
                 "The vanilla {0}.jar is corrupted or modified; re-downloading");
         put("forge.vanillaRestored", "файл восстановлен", "file restored");
         put("forge.vanillaOk", "файл в порядке", "file is fine");
@@ -663,7 +724,7 @@ public final class Strings {
         put("natives.missingSkip", "Нативная библиотека не найдена, пропуск: {0}",
                 "Native library not found, skipping: {0}");
         put("resolver.downloadingVersion", "Загрузка описания версии {0}", "Downloading version metadata {0}");
-        put("assets.noIndex", "У версии нет индекса ассетов — пропускаем",
+        put("assets.noIndex", "У версии нет индекса ассетов , пропускаем",
                 "The version has no asset index; skipping");
 
         put("install.noFile", "{0} (нет файла для загрузки)", "{0} (no file to download)");
@@ -718,9 +779,29 @@ public final class Strings {
         put("instances.deleteConfirm", "Удалить игровую директорию «{0}»? Моды и миры этой установки будут удалены безвозвратно.",
                 "Delete the game directory of \"{0}\"? Mods and worlds of this installation will be removed permanently.");
         put("instances.deleted", "Установка удалена: {0}", "Installation deleted: {0}");
-        put("instances.empty", "Установок пока нет: запустите игру или импортируйте модпак — они появятся здесь",
+        put("instances.empty", "Установок пока нет: запустите игру или импортируйте модпак , они появятся здесь",
                 "No installations yet: launch the game or import a modpack and they will appear here");
         put("instances.summary", "Установок: {0}", "Installations: {0}");
+        put("instances.playtime", "{0} ч {1} мин", "{0}h {1}m");
+        put("instances.worlds", "Миры", "Worlds");
+        put("instances.screenshots", "Скриншоты", "Screenshots");
+        put("instances.openFile", "Открыть", "Open");
+        put("instances.emptyFolder", "Папка пуста", "The folder is empty");
+        put("instances.deleteEntryConfirm", "Удалить \"{0}\" безвозвратно?", "Delete \"{0}\" permanently?");
+        put("mods.searchPlaceholder", "Поиск по установленным модам…", "Search installed mods…");
+        put("mods.modpackFilter", "Модпаки Modrinth (.mrpack) и CurseForge (.zip)",
+                "Modrinth (.mrpack) and CurseForge (.zip) modpacks");
+        put("modpack.cfFileFailed", "CurseForge: не удалось разрешить файл {0} проекта {1}",
+                "CurseForge: failed to resolve file {0} of project {1}");
+        put("settings.exportSettings", "Экспорт настроек", "Export settings");
+        put("settings.importSettings", "Импорт настроек", "Import settings");
+        put("settings.settingsExported", "Настройки экспортированы: {0}", "Settings exported: {0}");
+        put("settings.settingsImportedRestart", "Настройки импортированы. Перезапустите лаунчер, чтобы применить их полностью",
+                "Settings imported. Restart the launcher to apply them fully");
+        put("settings.importFailed", "Не удалось импортировать настройки: {0}",
+                "Failed to import settings: {0}");
+        put("settings.importConfirm", "Импортировать настройки? Текущие будут заменены.",
+                "Import settings? Current ones will be replaced.");
 
         put("mods.modpacks", "Модпаки", "Modpacks");
         put("mods.exportMrpack", "Экспорт .mrpack", "Export .mrpack");
@@ -778,17 +859,29 @@ public final class Strings {
         put("modpack.importedWithDir", "Модпак «{0}» установлен и выбран. Каталог установки:{1}",
                 "Modpack \"{0}\" installed and selected. Installation directory:{1}");
         put("mods.installedInto", "Установка в: {0}", "Installing into: {0}");
-        put("mods.mrpackInMods", "В папке модов лежит модпак {0} — игра его не загрузит. Импортируйте его кнопкой «Импорт .mrpack»",
-                "The mods folder contains the modpack {0} — the game will not load it. Import it with the \"Import .mrpack\" button");
+        put("mods.mrpackInMods", "В папке модов лежит модпак {0} , игра его не загрузит. Импортируйте его кнопкой «Импорт .mrpack»",
+                "The mods folder contains the modpack {0} , the game will not load it. Import it with the \"Import .mrpack\" button");
         put("mods.unpackMrpack", "Распаковать .mrpack", "Unpack .mrpack");
         put("modpack.importFailed", "Не удалось импортировать модпак: {0}",
                 "Failed to import the modpack: {0}");
         put("modpack.exportFailed", "Не удалось экспортировать модпак: {0}",
                 "Failed to export the modpack: {0}");
         put("mods.modpackBadge", "модпак", "modpack");
-        put("mods.modsElsewhere", "В текущей установке модов нет — они установлены в: {0}",
-                "The current installation has no mods — they are installed in: {0}");
+        put("mods.modsElsewhere", "В текущей установке модов нет , они установлены в: {0}",
+                "The current installation has no mods , they are installed in: {0}");
         put("mods.switchTo", "Переключиться", "Switch");
+        put("settings.gameDataPath", "Каталог Minecraft", "Minecraft directory");
+        put("settings.gameDataPathHint", "Пусто , стандартный каталог в данных лаунчера; изменение применяется к новым загрузкам",
+                "Empty means the default directory inside launcher data; applies to new downloads");
+        put("settings.gameDataCopy", "Копировать данные", "Copy data");
+        put("settings.gameDataMove", "Перенести данные", "Move data");
+        put("settings.gameDataConfirm", "Данные будут скопированы в {0}, существующие файлы там будут перезаписаны. Продолжить?",
+                "Data will be copied into {0}; existing files there will be overwritten. Continue?");
+        put("settings.gameDataApplied", "Каталог Minecraft: {0}", "Minecraft directory: {0}");
+        put("settings.gameDataNested", "Новый каталог не должен находиться внутри текущего (и наоборот)",
+                "The new directory must not be inside the current one (or vice versa)");
+        put("settings.gameDataNotAbsolute", "Укажите абсолютный путь к каталогу",
+                "Specify an absolute directory path");
         put("settings.envVars", "Переменные окружения", "Environment variables");
         put("settings.envVarsHint", "По одной KEY=VALUE на строку",
                 "One KEY=VALUE per line");

@@ -609,7 +609,13 @@ public final class AgroTheme {
         return new Font(Font.MONOSPACED, Font.PLAIN, size);
     }
 
+    private static volatile Set<String> fontFamiliesCache;
+
     private static Set<String> availableFamilies() {
+        Set<String> cached = fontFamiliesCache;
+        if (cached != null) {
+            return cached;
+        }
         Set<String> available = new HashSet<>();
         try {
             for (String name : java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
@@ -618,6 +624,7 @@ public final class AgroTheme {
             }
         } catch (Throwable ignored) {
         }
+        fontFamiliesCache = available;
         return available;
     }
 

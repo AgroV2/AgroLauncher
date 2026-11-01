@@ -6,7 +6,8 @@ public enum LoaderType {
     QUILT("quilt", "Quilt", true),
     FORGE("forge", "Forge", true),
     NEOFORGE("neoforge", "NeoForge", true),
-    OPTIFINE("optifine", "OptiFine", false);
+    OPTIFINE("optifine", "OptiFine", false),
+    HORIZON("horizon", "Rust (Horizon)", false);
 
     private final String id;
     private final String displayName;

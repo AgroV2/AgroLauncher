@@ -54,6 +54,8 @@ public final class VersionsPanel extends JPanel {
     private final JButton refreshButton = UiFactory.button(Strings.get("versions.refreshList"));
 
     private List<RemoteVersion> allVersions = new ArrayList<>();
+    private boolean syncingSelection;
+    private int loaderQueryGeneration;
 
     public VersionsPanel(LauncherContext context, Consumer<String> statusReporter,
                          Runnable onSelectionChanged) {
@@ -68,8 +70,8 @@ public final class VersionsPanel extends JPanel {
         add(buildHeader(), BorderLayout.NORTH);
         add(buildContent(), BorderLayout.CENTER);
 
-        updateSelectionLabel();
-        loadLoaderVersions();
+        versionsModel.addElement(VersionChoices.rust());
+        refreshSelection();
         loadVersions(false);
     }
 
@@ -144,10 +146,10 @@ public final class VersionsPanel extends JPanel {
         JPanel body = UiFactory.transparentPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-        for (LoaderType type : LoaderType.values()) {
+        for (LoaderType type : VersionChoices.javaLoaders()) {
             loaderCombo.addItem(type);
         }
-        loaderCombo.setSelectedItem(LoaderType.fromId(context.settings().selectedLoader));
+        loaderCombo.setSelectedItem(isRustSelected() ? null : LoaderType.fromId(context.settings().selectedLoader));
         UiFactory.fixHeight(loaderCombo, 34);
         loaderCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
         loaderCombo.addActionListener(e -> onLoaderChanged());
@@ -218,57 +220,83 @@ public final class VersionsPanel extends JPanel {
 
     private void loadInstalledOnly() {
         SwingUtilities.invokeLater(() -> {
-            versionsModel.clear();
             List<String> installed = context.versionResolver().installedVersions();
+            List<RemoteVersion> versions = new ArrayList<>();
             for (String id : installed) {
-                versionsModel.addElement(new RemoteVersion(id, "release", null, null, null));
+                versions.add(new RemoteVersion(id, "release", null, null, null));
             }
-            if (installed.isEmpty()) {
-                report(Strings.get("versions.noVersions"));
-            } else {
-                report(Strings.get("versions.offlineList", installed.size()));
-                String previous = context.settings().selectedVersion;
-                for (int i = 0; i < versionsModel.size(); i++) {
-                    if (versionsModel.get(i).id.equals(previous)) {
-                        versionsList.setSelectedIndex(i);
-                        return;
-                    }
-                }
-            }
+            displayVersions(versions);
+            report(installed.isEmpty() ? Strings.get("horizon.offlineVersionList")
+                    : Strings.get("versions.offlineList", installed.size()));
         });
     }
 
     private void applyFilters() {
         SwingUtilities.invokeLater(() -> {
-            String previous = context.settings().selectedVersion;
-            versionsModel.clear();
+            List<RemoteVersion> visible = new ArrayList<>();
             for (RemoteVersion version : allVersions) {
                 boolean include = version.isRelease()
                         || (version.isSnapshot() && showSnapshots.isSelected())
                         || (version.isOld() && showOld.isSelected());
-                if (include) {
-                    versionsModel.addElement(version);
-                }
+                if (include) visible.add(version);
             }
-            for (int i = 0; i < versionsModel.size(); i++) {
-                if (versionsModel.get(i).id.equals(previous)) {
-                    versionsList.setSelectedIndex(i);
-                    versionsList.ensureIndexIsVisible(i);
-                    return;
-                }
-            }
-            if (!versionsModel.isEmpty()) {
-                versionsList.setSelectedIndex(0);
-            }
+            displayVersions(visible);
         });
     }
 
-    private void onVersionSelected() {
-        RemoteVersion selected = versionsList.getSelectedValue();
-        if (selected == null) {
-            return;
+    private void displayVersions(List<RemoteVersion> source) {
+        boolean matched = false;
+        syncingSelection = true;
+        try {
+            versionsModel.clear();
+            for (RemoteVersion choice : VersionChoices.withRust(source)) versionsModel.addElement(choice);
+            for (int i = 0; i < versionsModel.size(); i++) {
+                if (VersionChoices.matches(versionsModel.get(i), context.settings())) {
+                    versionsList.setSelectedIndex(i);
+                    versionsList.ensureIndexIsVisible(i);
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                for (int i = 0; i < versionsModel.size(); i++) {
+                    if (!VersionChoices.isRust(versionsModel.get(i))) {
+                        versionsList.setSelectedIndex(i);
+                        break;
+                    }
+                }
+            }
+        } finally {
+            syncingSelection = false;
         }
-        context.settings().selectedVersion = selected.id;
+        if (!matched && versionsList.getSelectedValue() != null) onVersionSelected();
+        else {
+            updateSelectionLabel();
+            loadLoaderVersions();
+        }
+    }
+
+    private boolean isRustSelected() {
+        return LoaderType.fromId(context.settings().selectedLoader) == LoaderType.HORIZON;
+    }
+
+    private void syncLoaderSelection() {
+        boolean previous = syncingSelection;
+        syncingSelection = true;
+        try {
+            loaderCombo.setSelectedItem(isRustSelected() ? null : LoaderType.fromId(context.settings().selectedLoader));
+            loaderCombo.setEnabled(!isRustSelected());
+        } finally {
+            syncingSelection = previous;
+        }
+    }
+
+    private void onVersionSelected() {
+        if (syncingSelection) return;
+        RemoteVersion selected = versionsList.getSelectedValue();
+        if (selected == null) return;
+        VersionChoices.select(selected, context.settings());
+        syncLoaderSelection();
         context.settings().save();
         updateSelectionLabel();
         loadLoaderVersions();
@@ -276,11 +304,11 @@ public final class VersionsPanel extends JPanel {
     }
 
     private void onLoaderChanged() {
+        if (syncingSelection || isRustSelected()) return;
         LoaderType type = (LoaderType) loaderCombo.getSelectedItem();
-        if (type == null) {
-            return;
-        }
+        if (type == null) return;
         context.settings().selectedLoader = type.id();
+        context.settings().selectedModBuildId = "";
         context.settings().selectedLoaderVersion = "";
         context.settings().save();
         updateSelectionLabel();
@@ -289,6 +317,7 @@ public final class VersionsPanel extends JPanel {
     }
 
     private void saveLoaderVersion() {
+        if (syncingSelection || isRustSelected()) return;
         LoaderInstaller.LoaderVersion selected =
                 (LoaderInstaller.LoaderVersion) loaderVersionCombo.getSelectedItem();
         if (selected != null) {
@@ -299,7 +328,33 @@ public final class VersionsPanel extends JPanel {
         }
     }
 
+    public void refreshSelection() {
+        syncingSelection = true;
+        try {
+            loaderCombo.setSelectedItem(isRustSelected() ? null : LoaderType.fromId(context.settings().selectedLoader));
+            versionsList.clearSelection();
+            for (int i = 0; i < versionsModel.size(); i++) {
+                if (VersionChoices.matches(versionsModel.get(i), context.settings())) {
+                    versionsList.setSelectedIndex(i);
+                    break;
+                }
+            }
+        } finally {
+            syncingSelection = false;
+        }
+        updateSelectionLabel();
+        loadLoaderVersions();
+    }
+
     private void loadLoaderVersions() {
+        int generation = ++loaderQueryGeneration;
+        syncLoaderSelection();
+        if (isRustSelected()) {
+            loaderVersionsModel.removeAllElements();
+            loaderVersionCombo.setEnabled(false);
+            loaderStatusLabel.setText(Strings.get("horizon.standaloneVersion"));
+            return;
+        }
         LoaderType type = (LoaderType) loaderCombo.getSelectedItem();
         String mcVersion = context.settings().selectedVersion;
 
@@ -327,6 +382,8 @@ public final class VersionsPanel extends JPanel {
 
             @Override
             protected void done() {
+                if (generation != loaderQueryGeneration || type != LoaderType.fromId(context.settings().selectedLoader)
+                        || !mcVersion.equals(context.settings().selectedVersion)) return;
                 try {
                     List<LoaderInstaller.LoaderVersion> versions = get();
                     loaderVersionsModel.removeAllElements();
@@ -371,7 +428,9 @@ public final class VersionsPanel extends JPanel {
             selectionLabel.setText(Strings.get("play.versionNotSelected"));
             return;
         }
-        if (type == LoaderType.VANILLA) {
+        if (type == LoaderType.HORIZON) {
+            selectionLabel.setText(by.agro.launcher.horizon.HorizonManager.INSTANCE_NAME + " (Horizon)");
+        } else if (type == LoaderType.VANILLA) {
             selectionLabel.setText("Minecraft " + mcVersion);
         } else {
             String loaderVersion = context.settings().selectedLoaderVersion;
@@ -436,6 +495,8 @@ public final class VersionsPanel extends JPanel {
                 return "";
             }
             switch (type) {
+                case "horizon":
+                    return "Rust · Horizon";
                 case "release":
                     return Strings.get("versions.typeRelease");
                 case "snapshot":

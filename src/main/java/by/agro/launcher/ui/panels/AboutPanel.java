@@ -89,6 +89,8 @@ public final class AboutPanel extends JPanel {
         content.add(UiFactory.verticalGap(14));
         content.add(stretch(buildUpdatesCard()));
         content.add(UiFactory.verticalGap(12));
+        content.add(stretch(buildHorizonCard()));
+        content.add(UiFactory.verticalGap(12));
         content.add(stretch(buildFooter()));
 
         wrapper.add(UiFactory.scroll(content), BorderLayout.CENTER);
@@ -213,6 +215,37 @@ public final class AboutPanel extends JPanel {
         row.add(autoCheck);
 
         card.add(row);
+        return card;
+    }
+
+    private JComponent buildHorizonCard() {
+        JPanel card = UiFactory.card();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.add(UiFactory.fieldLabel("Horizon · 26.3 Rust"));
+        card.add(UiFactory.verticalGap(6));
+        card.add(UiFactory.hint(Strings.get("horizon.credits")));
+        card.add(UiFactory.verticalGap(8));
+        JPanel links = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        links.setOpaque(false);
+        links.add(linkButton("Horizon", "https://github.com/horizon-rust/horizon", "GitHub"));
+        JButton license = UiFactory.button(Strings.get("horizon.license"));
+        license.addActionListener(e -> {
+            try (var in = AboutPanel.class.getResourceAsStream("/licenses/Horizon-MIT.txt")) {
+                if (in == null) throw new java.io.IOException("Horizon license resource is missing");
+                var text = new javax.swing.JTextArea(new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+                text.setEditable(false);
+                text.setLineWrap(true);
+                text.setWrapStyleWord(true);
+                text.setCaretPosition(0);
+                var scroll = new javax.swing.JScrollPane(text);
+                scroll.setPreferredSize(new java.awt.Dimension(620, 420));
+                JOptionPane.showMessageDialog(this, scroll, Strings.get("horizon.license"), JOptionPane.INFORMATION_MESSAGE);
+            } catch (java.io.IOException ex) {
+                JOptionPane.showMessageDialog(this, ex.getMessage(), Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
+            }
+        });
+        links.add(license);
+        card.add(links);
         return card;
     }
 

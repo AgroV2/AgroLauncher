@@ -183,6 +183,7 @@ public final class ModBuildManager {
         if (!root.equals(dir.getParent())) {
             throw new IOException("Build directory must be directly inside mod-builds");
         }
+        by.agro.launcher.core.SecureFiles.rejectSymlinkParents(dir);
         return dir;
     }
 

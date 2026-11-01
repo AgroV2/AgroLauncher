@@ -93,6 +93,7 @@ public final class BackupService {
     }
 
     private void copyTree(Path root, Path source, Path data, BackupManifest manifest) throws IOException {
+        java.util.List<Path> copied = new java.util.ArrayList<>();
         Files.walkFileTree(source, new SimpleFileVisitor<>() {
             @Override public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
                 if (attrs.isSymbolicLink() || Files.isSymbolicLink(dir)) return FileVisitResult.SKIP_SUBTREE;
@@ -105,10 +106,24 @@ public final class BackupService {
                 Path target = resolve(data, relative);
                 Files.createDirectories(target.getParent());
                 Files.copy(file, target, StandardCopyOption.REPLACE_EXISTING, LinkOption.NOFOLLOW_LINKS);
-                manifest.entries.add(new BackupManifest.Entry(relative, HashUtil.digest(target, "SHA-256"), Files.size(target)));
+                copied.add(target);
                 return FileVisitResult.CONTINUE;
             }
         });
+        java.util.List<BackupManifest.Entry> entries = copied.parallelStream()
+                .map(target -> {
+                    try {
+                        return new BackupManifest.Entry(
+                                data.relativize(target).toString().replace('\\', '/'),
+                                HashUtil.digest(target, "SHA-256"),
+                                Files.size(target));
+                    } catch (IOException e) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toList());
+        manifest.entries.addAll(entries);
     }
 
     private Path safeRoot(Path root) throws IOException {

@@ -141,6 +141,9 @@ public final class CleanupService {
         Set<Path> virtualRoots = new HashSet<>();
         Set<Path> versionFiles = new HashSet<>();
         Set<Integer> javaMajors = new HashSet<>();
+        if (Files.isRegularFile(paths.root().resolve("horizon/current"), LinkOption.NOFOLLOW_LINKS)) {
+            javaMajors.add(25);
+        }
 
         for (String versionId : retainedVersions) {
             ResolvedVersion version = resolver.resolve(versionId, null, ProgressListener.NOOP, true);

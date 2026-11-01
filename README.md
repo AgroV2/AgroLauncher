@@ -339,3 +339,49 @@ by.agro.launcher
 ## Лицензия
 
 Код предоставляется как есть. Minecraft — торговая марка Mojang AB; лаунчер не связан с Mojang и Microsoft.
+
+## 26.3 Rust (Horizon)
+
+On the **Versions** screen, select **26.3 Rust**, listed immediately above vanilla
+**26.3**, then launch it from **Play**. Rust is a separate version choice, not a
+mod-loader option; Java loader controls are disabled for it. The Instances screen
+lists the Rust instance after its first launch. Existing Horizon instances remain compatible. The first
+launch downloads a platform-specific Horizon nightly and verifies its Ed25519
+release signature and archive SHA-256 before extraction. Minecraft 26.3 files,
+the server JAR and Java 25 are used once to prepare local resources. This can take
+several minutes. Future launches reuse the prepared resources. Compatible new
+builds can reuse a copy of an earlier build's resources.
+
+This integration uses **only the account nickname**, never its session or tokens.
+It supports offline-mode servers, not authenticated online-mode servers. Java mods,
+Java modpacks and shaders are not supported. JVM RAM/argument settings do not apply
+to the native client. Horizon is experimental, not a drop-in compatibility guarantee.
+
+The game folder is `instances/installations/26.3/horizon/default`, with its own saves,
+options, resource packs and screenshots. Logs/crash reports go to its `horizon/`
+subfolder. Shared vanilla files are untouched. Engine builds and prepared resources
+live in `horizon/builds/`, outside the generic cache cleaner; old builds are retained
+because upstream's moving nightly release may no longer offer them. After the first
+successful preparation, launcher offline mode also works without Java or downloads.
+For a fresh resource preparation, remove `.agrolauncher-prepared` from the current
+engine build. Java-instance Repair is deliberately disabled for Horizon.
+
+Available release platforms: Windows x64, Linux x64, macOS x64/arm64. Native runtime
+requirements still apply (e.g. glibc and graphics drivers on Linux).
+
+Horizon: Copyright (c) 2026 Ludovic Marie and the Horizon contributors, MIT. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); the full license is also in About.
+Minecraft files remain Mojang's, not MIT-licensed. Horizon's Launch API guide asks
+launchers to check Minecraft ownership with a Microsoft account; that request is
+separate from Horizon's MIT license. This offline-only integration does not implement
+Microsoft sign-in or an ownership check. Players remain responsible for their right
+to use Minecraft.
+
+### 26.3 Rust — кратко
+
+**Версии → 26.3 Rust → Играть.** Строка расположена сразу над обычной 26.3;
+в списке загрузчиков Rust больше нет. Первая подготовка с Java 25 требует сети и может
+занять несколько минут; затем доступен запуск без сети. Это отдельный Rust-клиент,
+а не замена общих файлов vanilla. Используется только ник аккаунта, без токенов и
+Microsoft. Java-моды, Java-модпаки и шейдеры не поддерживаются. В «О программе» есть
+авторство Horizon и полный текст MIT. Файлы Minecraft загружаются отдельно с Mojang.
