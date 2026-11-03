@@ -163,5 +163,81 @@ class HorizonManagerTest {
                 by.agro.launcher.launch.GameLauncher.PlaytimeMarker.class).totalMs > 0);
     }
 
+    @Test void unknownRepublishedManifestDownloadsPinnedOriginalWithoutTouchingVanilla() throws Exception {
+        Path build = Files.createDirectory(temp.resolve("engine"));
+        Path vanilla = temp.resolve("minecraft/versions/26.3/26.3.json");
+        Files.createDirectories(vanilla.getParent());
+        Files.writeString(vanilla, "republished or rewritten JSON");
+        String original = "original Mojang manifest";
+        Path fixture = temp.resolve("original.json");
+        Files.writeString(fixture, original);
+        String sha = HashUtil.sha1(fixture);
+        Files.writeString(build.resolve("research-lock.json"), "{\"minecraft\":{\"manifest_sha1\":\"" + sha + "\"}}");
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        HorizonManager.ManifestDownload download = (url, target, hash) -> {
+            calls.incrementAndGet();
+            assertEquals("https://piston-meta.mojang.com/v1/packages/" + sha + "/26.3.json", url);
+            assertEquals(sha, hash);
+            Files.createDirectories(target.getParent());
+            Files.copy(fixture, target);
+        };
+        HorizonManager.ensureKnownManifest(build, vanilla, false, download, ProgressListener.NOOP);
+        Path fallback = build.resolve(".local/minecraft/26.3/manifest.json");
+        assertEquals(original, Files.readString(fallback));
+        assertEquals("republished or rewritten JSON", Files.readString(vanilla));
+        HorizonManager.ensureKnownManifest(build, vanilla, true, (u, t, h) -> fail("unexpected network"), ProgressListener.NOOP);
+        assertEquals(1, calls.get());
+    }
+
+    @Test void acceptedVanillaManifestSkipsFallbackAndNetwork() throws Exception {
+        Path build = Files.createDirectory(temp.resolve("engine"));
+        Path vanilla = temp.resolve("version.json");
+        Files.writeString(vanilla, "accepted republished version");
+        String accepted = HashUtil.sha1(vanilla);
+        Files.writeString(build.resolve("research-lock.json"), "{\"minecraft\":{\"manifest_sha1\":\"" + "a".repeat(40)
+                + "\",\"accepted_manifest_sha1\":[\"" + accepted + "\"]}}");
+        HorizonManager.ensureKnownManifest(build, vanilla, true, (u, t, h) -> fail("unexpected network"), ProgressListener.NOOP);
+        assertFalse(Files.exists(build.resolve(".local")));
+    }
+
+    @Test void missingOrCorruptFallbackOfflineDoesNotAlterVanilla() throws Exception {
+        Path build = Files.createDirectory(temp.resolve("engine"));
+        Path vanilla = temp.resolve("version.json");
+        Files.writeString(vanilla, "unknown");
+        Files.writeString(build.resolve("research-lock.json"), "{\"minecraft\":{\"manifest_sha1\":\"" + "a".repeat(40) + "\"}}");
+        Path fallback = build.resolve(".local/minecraft/26.3/manifest.json");
+        Files.createDirectories(fallback.getParent());
+        Files.writeString(fallback, "bad cached data");
+        assertThrows(IOException.class, () -> HorizonManager.ensureKnownManifest(build, vanilla, true,
+                (u,t,h) -> fail("unexpected network"), ProgressListener.NOOP));
+        assertEquals("unknown", Files.readString(vanilla));
+        assertEquals("bad cached data", Files.readString(fallback));
+    }
+
+    @Test void rejectsIncorrectDownloadAndUnsafeLockHash() throws Exception {
+        Path build = Files.createDirectory(temp.resolve("engine"));
+        Path vanilla = temp.resolve("version.json");
+        Files.writeString(vanilla, "unknown");
+        Path lock = build.resolve("research-lock.json");
+        Files.writeString(lock, "{\"minecraft\":{\"manifest_sha1\":\"" + "a".repeat(40) + "\"}}");
+        assertThrows(IOException.class, () -> HorizonManager.ensureKnownManifest(build, vanilla, false, (u,t,h) -> {
+            Files.createDirectories(t.getParent()); Files.writeString(t, "wrong data");
+        }, ProgressListener.NOOP));
+        Files.writeString(lock, "{\"minecraft\":{\"manifest_sha1\":\"../../unsafe\"}}");
+        assertThrows(IOException.class, () -> HorizonManager.ensureKnownManifest(build, vanilla, false,
+                (u,t,h) -> fail("unexpected network"), ProgressListener.NOOP));
+        assertEquals("unknown", Files.readString(vanilla));
+    }
+
+    @Test void rejectsSymlinkedFallback() throws Exception {
+        if (Platform.isWindows()) return;
+        Path build = Files.createDirectory(temp.resolve("engine"));
+        Path vanilla = temp.resolve("version.json"); Files.writeString(vanilla, "unknown");
+        Files.writeString(build.resolve("research-lock.json"), "{\"minecraft\":{\"manifest_sha1\":\"" + "a".repeat(40) + "\"}}");
+        Files.createSymbolicLink(build.resolve(".local"), temp);
+        assertThrows(IOException.class, () -> HorizonManager.ensureKnownManifest(build, vanilla, false,
+                (u,t,h) -> fail("unexpected network"), ProgressListener.NOOP));
+    }
+
     private String value(List<String> command, String flag) { return command.get(command.indexOf(flag) + 1); }
 }

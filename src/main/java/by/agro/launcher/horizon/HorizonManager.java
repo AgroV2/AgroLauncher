@@ -10,6 +10,7 @@ import by.agro.launcher.launch.GameLauncher;
 import by.agro.launcher.launch.GameProcess;
 import by.agro.launcher.version.VersionManifest;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonElement;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -216,6 +217,8 @@ public final class HorizonManager {
         environment.put("JAVA_HOME", javaHome.toString());
         environment.put("PATH", javaHome.resolve("bin") + java.io.File.pathSeparator
                 + System.getenv().getOrDefault("PATH", ""));
+        ensureKnownManifest(build, paths.versionJson(MINECRAFT_VERSION), settings.offlineMode,
+                (url, target, sha1) -> downloader.downloadVerified(url, target, "SHA-1", sha1, 4L * 1024 * 1024), listener);
         listener.onMessage(Strings.get("horizon.preparing"));
         Files.deleteIfExists(build.resolve(PREPARED_MARKER));
         runPrepare(build, List.of("--prepare", "--server-jar", jar.toString(), "--minecraft-dir", paths.gameDir().toString(),
@@ -228,6 +231,46 @@ public final class HorizonManager {
         }
         Files.writeString(build.resolve(PREPARED_MARKER), pins.key());
         return resources(build);
+    }
+
+    @FunctionalInterface
+    interface ManifestDownload {
+        void download(String url, Path target, String sha1) throws IOException;
+    }
+    static void ensureKnownManifest(Path build, Path vanillaManifest, boolean offline,
+                                    ManifestDownload download, ProgressListener listener) throws IOException {
+        final String pinned;
+        Set<String> accepted = new HashSet<>();
+        try {
+            JsonObject mc = Json.object(Json.readObject(build.resolve("research-lock.json")), "minecraft");
+            pinned = Json.string(mc, "manifest_sha1", "");
+            if (!pinned.matches("[0-9a-f]{40}")) throw new IOException(Strings.get("horizon.incompatibleBuild"));
+            accepted.add(pinned);
+            if (mc.has("accepted_manifest_sha1")) {
+                for (JsonElement item : mc.getAsJsonArray("accepted_manifest_sha1")) {
+                    String hash = item.getAsString();
+                    if (!hash.matches("[0-9a-f]{40}")) throw new IOException(Strings.get("horizon.incompatibleBuild"));
+                    accepted.add(hash);
+                }
+            }
+        } catch (RuntimeException e) {
+            throw new IOException(Strings.get("horizon.incompatibleBuild"), e);
+        }
+        SecureFiles.rejectSymlinkParents(vanillaManifest);
+        if (Files.isRegularFile(vanillaManifest, LinkOption.NOFOLLOW_LINKS)
+                && accepted.contains(HashUtil.sha1(vanillaManifest))) return;
+        Path destination = build.resolve(".local/minecraft/" + MINECRAFT_VERSION + "/manifest.json");
+        SecureFiles.rejectSymlinkParents(destination);
+        if (Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS)
+                && accepted.contains(HashUtil.sha1(destination))) return;
+        if (offline) throw new IOException(Strings.get("horizon.manifestMissingOffline"));
+        listener.onMessage(Strings.get("horizon.manifestDownload"));
+        String url = "https://piston-meta.mojang.com/v1/packages/" + pinned + "/" + MINECRAFT_VERSION + ".json";
+        download.download(url, destination, pinned);
+        // Do not rely on download caches or injected transports for the trust decision.
+        if (!Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) || !HashUtil.verify(destination, pinned)) {
+            throw new IOException(Strings.get("horizon.manifestMismatch"));
+        }
     }
 
     private static void runPrepare(Path build, List<String> arguments, Map<String, String> env,

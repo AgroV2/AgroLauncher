@@ -65,6 +65,12 @@ public final class Strings {
                 "The verified server JAR needed by Horizon is missing. Prepare it online first.");
         put("horizon.serverDownload", "Загрузка серверного JAR Minecraft для подготовки ресурсов…",
                 "Downloading the Minecraft server JAR for resource preparation…");
+        put("horizon.manifestDownload", "Загрузка оригинального описания Minecraft для Horizon…",
+                "Downloading the original Minecraft version manifest for Horizon…");
+        put("horizon.manifestMissingOffline", "Для подготовки Horizon нужен оригинальный манифест Minecraft. Повторите запуск с включённой сетью.",
+                "Horizon needs the original Minecraft manifest. Retry with network access enabled.");
+        put("horizon.manifestMismatch", "Контрольная сумма манифеста Minecraft для Horizon не совпадает.",
+                "The Minecraft manifest checksum for Horizon does not match.");
         put("horizon.preparing", "Подготовка ресурсов Horizon (первый запуск может занять несколько минут)…",
                 "Preparing Horizon resources (the first launch may take several minutes)…");
         put("horizon.resourcesIncomplete", "Подготовка Horizon не создала все необходимые ресурсы.",
