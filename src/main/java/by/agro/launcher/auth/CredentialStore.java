@@ -27,10 +27,76 @@ public interface CredentialStore {
 
     static CredentialStore system() {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-        if (os.contains("win")) return new WindowsStore();
+        if (os.contains("win")) return new ChunkedStore(new WindowsStore());
         if (os.contains("mac")) return new MacStore();
         if (os.contains("linux")) return new LinuxStore();
         return new UnsupportedStore(os);
+    }
+
+
+
+
+
+    final class ChunkedStore implements CredentialStore {
+        private static final String PREFIX = "agro-chunks-v1:";
+        private static final int CHUNK = 900, MAX_PARTS = 64;
+        private final CredentialStore raw;
+        ChunkedStore(CredentialStore raw) { this.raw = raw; }
+        private record Pointer(String generation, int count) { }
+        private static Pointer pointer(String text) throws IOException {
+            if (text == null || !text.startsWith(PREFIX)) return null;
+            String[] bits = text.substring(PREFIX.length()).split(":", -1);
+            if (bits.length != 2 || !bits[0].matches("[0-9a-f]{32}") || !bits[1].matches("[0-9]{1,2}"))
+                throw new IOException("Invalid credential record");
+            int count = Integer.parseInt(bits[1]);
+            if (count < 1 || count > MAX_PARTS) throw new IOException("Invalid credential record");
+            return new Pointer(bits[0], count);
+        }
+        private static String part(String id, String generation, int i) { return id + "/chunk/" + generation + "/" + i; }
+        @Override public synchronized void put(String id, String secret) throws Exception {
+            Pointer old = pointer(raw.get(id));
+            List<String> chunks = new ArrayList<>();
+            for (int at = 0; at < secret.length();) {
+                int end = Math.min(secret.length(), at + CHUNK);
+                if (end < secret.length() && Character.isHighSurrogate(secret.charAt(end - 1))
+                        && Character.isLowSurrogate(secret.charAt(end))) end--;
+                chunks.add(secret.substring(at, end)); at = end;
+            }
+            if (chunks.size() > MAX_PARTS) throw new IOException("Credential record is too large");
+            if (chunks.size() <= 1) {
+                raw.put(id, secret);
+            } else {
+                String generation = java.util.UUID.randomUUID().toString().replace("-", "");
+                int written = 0;
+                try {
+                    for (int i = 0; i < chunks.size(); i++) { raw.put(part(id, generation, i), chunks.get(i)); written++; }
+                    raw.put(id, PREFIX + generation + ":" + chunks.size());
+                } catch (Exception e) {
+                    for (int i = 0; i < written; i++) try { raw.remove(part(id, generation, i)); } catch (Exception ignored) { }
+                    throw e;
+                }
+            }
+            cleanup(id, old);
+        }
+        @Override public synchronized String get(String id) throws Exception {
+            String header = raw.get(id); Pointer p = pointer(header);
+            if (p == null) return header;
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < p.count(); i++) {
+                String value = raw.get(part(id, p.generation(), i));
+                if (value == null) throw new IOException("Incomplete credential record");
+                result.append(value);
+            }
+            return result.toString();
+        }
+        @Override public synchronized void remove(String id) throws Exception {
+            Pointer old = pointer(raw.get(id)); raw.remove(id); cleanup(id, old);
+        }
+        private void cleanup(String id, Pointer p) {
+            if (p != null) for (int i = 0; i < p.count(); i++) {
+                try { raw.remove(part(id, p.generation(), i)); } catch (Exception ignored) { }
+            }
+        }
     }
 
     final class WindowsStore implements CredentialStore {

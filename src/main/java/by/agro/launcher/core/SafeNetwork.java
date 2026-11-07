@@ -2,10 +2,8 @@ package by.agro.launcher.core;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.Socket;
 import java.net.URI;
 import java.net.UnknownHostException;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -23,10 +21,7 @@ public final class SafeNetwork {
         } catch (IllegalArgumentException e) {
             throw new IOException("Invalid URL: " + value, e);
         }
-        if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null
-                || uri.getUserInfo() != null) {
-            throw new IOException("Only absolute HTTPS URLs without user info are allowed: " + value);
-        }
+        requireHttpsSyntax(uri);
         validateResolvedAddresses(uri);
         return uri;
     }
@@ -50,6 +45,11 @@ public final class SafeNetwork {
         } catch (UnknownHostException e) {
             throw new IOException("Unable to resolve host: " + uri.getHost(), e);
         }
+        validateAddresses(uri, addresses);
+        return addresses;
+    }
+
+    static void validateAddresses(URI uri, InetAddress[] addresses) throws IOException {
         if (addresses.length == 0) {
             throw new IOException("Host resolved to no addresses: " + uri.getHost());
         }
@@ -59,130 +59,32 @@ public final class SafeNetwork {
                         + ": " + address.getHostAddress());
             }
         }
-        return addresses;
     }
 
-    public static void pinConnection(javax.net.ssl.HttpsURLConnection connection, URI uri)
+
+    public static javax.net.ssl.HttpsURLConnection openConnection(URI uri, java.net.Proxy proxy)
             throws IOException {
-        InetAddress[] validated = resolveAndValidate(uri);
-        if (validated.length == 0) {
-            return;
-        }
-        connection.setSSLSocketFactory(new PinnedAddressSSLSocketFactory(validated[0], uri.getHost()));
-        String hostHeader = uri.getHost();
-        if (uri.getPort() != -1 && uri.getPort() != 443) {
-            hostHeader = hostHeader + ":" + uri.getPort();
-        }
-        connection.setRequestProperty("Host", hostHeader);
+        requireHttpsSyntax(uri);
+        InetAddress[] addresses = resolveAndValidate(uri);
+        return openPinned(uri, proxy, addresses[0]);
     }
 
-    public static final class PinnedAddressSSLSocketFactory extends javax.net.ssl.SSLSocketFactory {
-        private final javax.net.ssl.SSLSocketFactory delegate =
-                (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
-        private final InetAddress address;
-        private final String host;
+    private static javax.net.ssl.HttpsURLConnection openPinned(URI uri, java.net.Proxy proxy,
+                                                       InetAddress address) throws IOException {
 
-        public PinnedAddressSSLSocketFactory(InetAddress address, String host) {
-            this.address = address;
-            this.host = host;
-        }
-
-        private javax.net.ssl.SSLSocket pinned(int port) throws IOException {
-            javax.net.ssl.SSLSocket socket = (javax.net.ssl.SSLSocket) delegate.createSocket(address, port);
-            try {
-                javax.net.ssl.SSLParameters parameters = socket.getSSLParameters();
-                parameters.setServerNames(java.util.List.of(new javax.net.ssl.SNIHostName(host)));
-                socket.setSSLParameters(parameters);
-            } catch (RuntimeException ignored) {
-
-            }
-            return socket;
-        }
-
-        @Override
-        public Socket createSocket(String host, int port) throws IOException {
-            return pinned(port);
-        }
-
-        @Override
-        public Socket createSocket(String host, int port, InetAddress localAddress, int localPort)
-                throws IOException {
-            return pinned(port);
-        }
-
-        @Override
-        public Socket createSocket(InetAddress address, int port) throws IOException {
-            return pinned(port);
-        }
-
-        @Override
-        public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort)
-                throws IOException {
-            return pinned(port);
-        }
-
-        @Override
-        public Socket createSocket(Socket socket, String host, int port, boolean autoClose)
-                throws IOException {
-            return delegate.createSocket(socket, host, port, autoClose);
-        }
-
-        @Override
-        public String[] getDefaultCipherSuites() {
-            return delegate.getDefaultCipherSuites();
-        }
-
-        @Override
-        public String[] getSupportedCipherSuites() {
-            return delegate.getSupportedCipherSuites();
-        }
+        var connection = (javax.net.ssl.HttpsURLConnection) uri.toURL()
+                .openConnection(java.net.Proxy.NO_PROXY);
+        connection.setSSLSocketFactory(new PinnedHttpsSocketFactory(address, uri.getHost(),
+                uri.getPort() == -1 ? 443 : uri.getPort(), proxy));
+        connection.setInstanceFollowRedirects(false);
+        return connection;
     }
 
-    public static final class HostPinningSslSocketFactory extends javax.net.ssl.SSLSocketFactory {
-        private final javax.net.ssl.SSLSocketFactory delegate =
-                (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
-
-        @Override
-        public Socket createSocket(String host, int port) throws IOException {
-            InetAddress[] validated = resolveAndValidate(URI.create("https://" + host));
-            if (validated.length == 0) {
-                return delegate.createSocket(host, port);
-            }
-            return new PinnedAddressSSLSocketFactory(validated[0], host).createSocket(host, port);
-        }
-
-        @Override
-        public Socket createSocket(String host, int port, InetAddress localAddress, int localPort)
-                throws IOException {
-            return delegate.createSocket(host, port, localAddress, localPort);
-        }
-
-        @Override
-        public Socket createSocket(InetAddress address, int port) throws IOException {
-            return delegate.createSocket(address, port);
-        }
-
-        @Override
-        public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort)
-                throws IOException {
-            return delegate.createSocket(address, port, localAddress, localPort);
-        }
-
-        @Override
-        public Socket createSocket(Socket socket, String host, int port, boolean autoClose)
-                throws IOException {
-            return delegate.createSocket(socket, host, port, autoClose);
-        }
-
-        @Override
-        public String[] getDefaultCipherSuites() {
-            return delegate.getDefaultCipherSuites();
-        }
-
-        @Override
-        public String[] getSupportedCipherSuites() {
-            return delegate.getSupportedCipherSuites();
-        }
+    private static void requireHttpsSyntax(URI uri) throws IOException {
+        if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null
+                || uri.getUserInfo() != null || uri.getHost().contains("%")
+                || uri.getPort() == 0 || uri.getPort() > 65535 || uri.getPort() < -1)
+            throw new IOException("Only absolute public HTTPS URLs without user info are allowed");
     }
 
     private static final List<String> DEFAULT_DOWNLOAD_HOSTS = List.of(
@@ -241,7 +143,7 @@ public final class SafeNetwork {
         }
     }
 
-    private static boolean isPublic(InetAddress address) {
+    static boolean isPublic(InetAddress address) {
         if (address.isAnyLocalAddress() || address.isLoopbackAddress()
                 || address.isLinkLocalAddress() || address.isSiteLocalAddress()
                 || address.isMulticastAddress()) {
@@ -259,6 +161,9 @@ public final class SafeNetwork {
                     && !(first == 172 && second >= 16 && second <= 31)
                     && !(first == 192 && second == 0)
                     && !(first == 192 && second == 168)
+                    && !(first == 192 && second == 88 && (bytes[2] & 0xff) == 99)
+                    && !(first == 198 && second == 51 && (bytes[2] & 0xff) == 100)
+                    && !(first == 203 && second == 0 && (bytes[2] & 0xff) == 113)
                     && !(first == 198 && (second == 18 || second == 19))
                     && first < 224;
         }
@@ -266,11 +171,12 @@ public final class SafeNetwork {
         int second = bytes[1] & 0xff;
         int third = bytes[2] & 0xff;
         int fourth = bytes[3] & 0xff;
-        boolean teredoOrDocumentation = first == 0x20 && second == 0x01
-                && ((third == 0x00 && fourth == 0x00) || (third == 0x0d && fourth == 0xb8));
-        return !(first == 0 || first == 0xff
-                || (first == 0xfe && (second & 0xc0) == 0x80)
-                || (first & 0xfe) == 0xfc
-                || teredoOrDocumentation);
+
+        return (first & 0xe0) == 0x20
+                && !(first == 0x20 && second == 0x01 && third < 2)
+                && !(first == 0x20 && second == 0x01 && third == 0x0d && fourth == 0xb8)
+                && !(first == 0x20 && second == 0x02)
+                && !(first == 0x3f && second == 0xfe)
+                && !(first == 0x3f && second == 0xff && (third & 0xf0) == 0);
     }
 }

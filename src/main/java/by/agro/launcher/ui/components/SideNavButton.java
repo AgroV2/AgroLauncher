@@ -117,7 +117,12 @@ public final class SideNavButton extends JButton {
             g2.fillRoundRect(6 + inset, 2, width - 12 - inset, height - 4, arc, arc);
         }
 
-        if (selectionProgress > 0f) {
+        if (selectionProgress > 0f && AgroTheme.interfaceStyle() == by.agro.launcher.ui.theme.InterfaceStyle.BREEZE) {
+            g2.setPaint(AgroTheme.gradientPaint(12, height - 3, Math.max(1, width - 24), 2));
+            g2.fillRoundRect(12, height - 4, Math.max(1, width - 24), 2, 2, 2);
+        } else if (selectionProgress > 0f
+                && AgroTheme.interfaceStyle() != by.agro.launcher.ui.theme.InterfaceStyle.APPLE
+                && AgroTheme.interfaceStyle() != by.agro.launcher.ui.theme.InterfaceStyle.GNOME) {
             int indicatorHeight = Math.max(4, Math.round((height - 16) * selectionProgress));
             int indicatorY = (height - indicatorHeight) / 2;
             g2.setPaint(AgroTheme.gradientPaint(0, indicatorY,

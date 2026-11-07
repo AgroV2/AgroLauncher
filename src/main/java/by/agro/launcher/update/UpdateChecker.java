@@ -8,33 +8,57 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 public final class UpdateChecker {
+    private static final Pattern VERSION_TAG = Pattern.compile(
+            "^(?i:AgroLauncher-)?[vV]?([0-9]+(?:\\.[0-9]+)*(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)$");
     private UpdateChecker() { }
 
     public record Asset(String name, String downloadUrl, long size) { }
-    public record Release(String version, String pageUrl, Asset asset, Asset checksumAsset) {
-        public boolean canAutoUpdate() { return asset != null; }
+    public record Release(String version, String pageUrl, Asset asset, Asset checksumAsset,
+                          Asset manifestAsset, Asset signatureAsset) {
+        public boolean canAutoUpdate() {
+            return asset != null && manifestAsset != null && signatureAsset != null && UpdateSignature.hasTrustedKey();
+        }
     }
 
     public static Release latest(Downloader downloader, String repository, String current) throws IOException {
-        if (repository == null || repository.isBlank()) return null;
+        if (repository == null || repository.isBlank()) throw new IOException("GitHub repository is not configured");
         String repo = repository.trim().replaceFirst("^https://github\\.com/", "").replaceAll("/+$", "");
         if (!repo.matches("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")) throw new IOException("Invalid GitHub repository");
         String body = downloader.getString("https://api.github.com/repos/" + repo + "/releases/latest",
                 Map.of("Accept", "application/vnd.github+json", "X-GitHub-Api-Version", "2022-11-28"));
-        JsonObject json = Json.parseObject(body);
-        String tag = Json.string(json, "tag_name", "").replaceFirst("^[vV]", "");
-        if (tag.isBlank() || compare(tag, current) <= 0) return null;
+        final JsonObject json;
+        try {
+            json = Json.parseObject(body);
+        } catch (RuntimeException e) {
+            throw new IOException("Invalid GitHub release response", e);
+        }
+        return parseRelease(json, repo, current, Platform.current(), Platform.arch());
+    }
+
+    static Release parseRelease(JsonObject json, String repo, String current, Platform platform, String arch)
+            throws IOException {
+        final String tag;
+        try {
+            tag = normalizeVersion(Json.string(json, "tag_name", ""));
+            if (compare(tag, current) <= 0) return null;
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Invalid release or current version: " + e.getMessage(), e);
+        }
         String page = Json.string(json, "html_url", "https://github.com/" + repo + "/releases/latest");
         List<Asset> assets = parseAssets(json);
-        Asset artifact = selectArtifact(assets, Platform.current(), Platform.arch());
+        Asset artifact = selectArtifact(assets, platform, arch);
         Asset checksum = artifact == null ? null : selectChecksum(assets, artifact.name());
-        return new Release(tag, page, artifact, checksum);
+        Asset signedManifest = artifact == null ? null : findExactAsset(assets, artifact.name() + ".manifest");
+        Asset signature = artifact == null ? null : findExactAsset(assets, artifact.name() + ".manifest.sig");
+        return new Release(tag, page, artifact, checksum, signedManifest, signature);
     }
 
     static List<Asset> parseAssets(JsonObject json) {
@@ -69,6 +93,11 @@ public final class UpdateChecker {
         return bestScore < 0 ? null : best;
     }
 
+    private static Asset findExactAsset(List<Asset> assets, String name) {
+        for (Asset asset : assets) if (name.equals(asset.name())) return asset;
+        return null;
+    }
+
     static Asset selectChecksum(List<Asset> assets, String artifactName) {
         String lower = artifactName.toLowerCase(Locale.ROOT);
         for (Asset asset : assets) {
@@ -84,19 +113,24 @@ public final class UpdateChecker {
                 || name.equals("sha256sums") || name.equals("checksums.txt") || name.equals("sha256sums.txt");
     }
 
-    static int compare(String a, String b) {
-        String[] left = a.split("[-+]", 2)[0].split("\\.");
-        String[] right = b.split("[-+]", 2)[0].split("\\.");
-        for (int i = 0; i < Math.max(left.length, right.length); i++) {
-            int x = i < left.length ? number(left[i]) : 0;
-            int y = i < right.length ? number(right[i]) : 0;
-            if (x != y) return Integer.compare(x, y);
-        }
-        return 0;
+
+    static String normalizeVersion(String raw) {
+        if (raw == null || raw.length() > 128) throw new IllegalArgumentException("Missing or oversized version");
+        var match = VERSION_TAG.matcher(raw.trim());
+        if (!match.matches()) throw new IllegalArgumentException("Unsupported version tag: " + raw);
+        return match.group(1);
     }
 
-    private static int number(String value) {
-        try { return Integer.parseInt(value.replaceAll("[^0-9].*$", "")); }
-        catch (NumberFormatException e) { return 0; }
+    static int compare(String a, String b) {
+        String[] left = normalizeVersion(a).split("[-+]", 2)[0].split("\\.");
+        String[] right = normalizeVersion(b).split("[-+]", 2)[0].split("\\.");
+        for (int i = 0; i < Math.max(left.length, right.length); i++) {
+            BigInteger x = i < left.length ? new BigInteger(left[i]) : BigInteger.ZERO;
+            BigInteger y = i < right.length ? new BigInteger(right[i]) : BigInteger.ZERO;
+            int result = x.compareTo(y);
+            if (result != 0) return result;
+        }
+
+        return 0;
     }
 }

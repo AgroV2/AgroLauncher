@@ -157,7 +157,7 @@ public final class VersionJson {
         return (gameArguments == null || gameArguments.isEmpty()) && minecraftArguments != null;
     }
 
-  
+
     public boolean isPreV16Assets() {
         return "pre-1.6".equals(assets) || "legacy".equals(assets);
     }

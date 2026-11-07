@@ -79,6 +79,29 @@ public final class BackgroundPanel extends JPanel {
         g2.dispose();
     }
 
+
+    void paintFrostedBackdrop(Graphics2D g, java.awt.Component card, int arc) {
+        if (settings.backgroundBlur || !backgroundManager.hasBackground()) return;
+        BufferedImage backdrop = backgroundManager.frostedBackdrop(getWidth(), getHeight(),
+                Math.max(8, settings.backgroundBlurRadius), this::repaint);
+        if (backdrop == null) return;
+        java.awt.Point offset = javax.swing.SwingUtilities.convertPoint(card, 0, 0, this);
+        Graphics2D copy = (Graphics2D) g.create();
+        try {
+            copy.clip(new java.awt.geom.RoundRectangle2D.Float(0, 0, card.getWidth() - 1,
+                    card.getHeight() - 1, arc, arc));
+            copy.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                    java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            copy.drawImage(backdrop, -offset.x, -offset.y, getWidth(), getHeight(), null);
+            if (settings.backgroundDimPercent > 0) {
+                Color base = AgroTheme.bgBase();
+                int alpha = Math.round(255 * settings.backgroundDimPercent / 100f);
+                copy.setColor(new Color(base.getRed(), base.getGreen(), base.getBlue(), alpha));
+                copy.fillRect(0, 0, card.getWidth(), card.getHeight());
+            }
+        } finally { copy.dispose(); }
+    }
+
     private void drawCovering(Graphics2D g2, ImageIcon icon, int width, int height) {
         int imageWidth = icon.getIconWidth();
         int imageHeight = icon.getIconHeight();

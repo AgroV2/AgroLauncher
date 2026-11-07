@@ -23,7 +23,7 @@ public final class Strings {
         put("app.name", "AgroLauncher", "AgroLauncher");
         put("app.subtitle", "Быстрый и кастомизируемый лаунчер Minecraft",
                 "Fast and customizable Minecraft launcher");
-        put("app.offlineOnly", "Только offline-серверы", "Offline servers only");
+        put("app.offlineOnly", "Оффлайн, Ely.by и Microsoft", "Offline, Ely.by and Microsoft");
         put("app.ready", "Готов к работе", "Ready");
         put("app.version", "версия {0}", "version {0}");
 
@@ -93,6 +93,49 @@ public final class Strings {
                 "Horizon , Ludovic Marie and the Horizon contributors, © 2026, MIT. Minecraft , Mojang; game files are downloaded separately.");
         put("horizon.license", "Лицензия Horizon (MIT)",
                 "Horizon license (MIT)");
+
+        put("hnmod.tab", "Horizon Native", "Horizon Native");
+        put("hnmod.details", "Версия {0} · {1}", "Version {0} · {1}");
+        put("hnmod.fileFilter", "Нативные моды Horizon (.hnmod)", "Horizon native mods (.hnmod)");
+        put("hnmod.instanceMissing", "Выбранный инстанс Horizon не найден. Выберите обычный 26.3 Rust или существующую сборку.", "The selected Horizon instance was not found. Select plain 26.3 Rust or an existing build.");
+        put("hnmod.instanceName", "Horizon · модов: {0} · {1}", "Horizon · mods: {0} · {1}");
+        put("hnmod.instanceDone", "Создан инстанс «{0}». Он выбран для запуска; свои миры и настройки находятся в его папке.", "Instance “{0}” was created and selected. Its worlds and settings are in its own folder.");
+        put("hnmod.newInstance", "Собрать отдельный инстанс", "Build separate instance");
+        put("hnmod.builderDownload", "Загрузка официального сборочного компонента Horizon…", "Downloading the official Horizon build component…");
+        put("hnmod.hint", "Выберите .hnmod для новой отдельной сборки. Обычный 26.3 Rust не изменяется.", "Select .hnmod files for a new separate build. Plain 26.3 Rust is unchanged.");
+        put("hnmod.add", "Добавить .hnmod", "Add .hnmod");
+        put("hnmod.toggle", "Включить / выключить", "Enable / disable");
+        put("hnmod.open", "Открыть папку", "Open folder");
+        put("hnmod.build", "Собрать клиент", "Build client");
+        put("hnmod.path", "Папка: {0}", "Folder: {0}");
+        put("hnmod.deleteConfirm", "Удалить нативный мод {0}?", "Delete native mod {0}?");
+        put("hnmod.invalid", "Неверный или неподдерживаемый .hnmod: проверьте архив и манифесты для 26.3.", "Invalid or unsupported .hnmod: check the archive and its 26.3 manifests.");
+        put("hnmod.duplicate", "Мод с ID {0} уже установлен. Сначала удалите старую версию.", "A mod with ID {0} is already installed. Remove the old version first.");
+        put("hnmod.needsBuild", "Нативные моды изменились или клиент ещё не собран. Откройте «Моды → Horizon Native» и соберите клиент.", "Native mods changed or the client has not been built. Open Mods → Horizon Native and build the client.");
+        put("hnmod.building", "Идёт сборка нативного клиента…", "Building the native client…");
+        put("hnmod.noEnabled", "Нет включённых нативных модов.", "No native mods are enabled.");
+        put("hnmod.launcherInvalid", "Выберите исполняемый файл официального Horizon Launcher.", "Select the official Horizon Launcher executable.");
+        put("hnmod.baseInvalid", "Подготовленная база Horizon повреждена: не найдена корректная контрольная сумма архива.", "The prepared Horizon base is damaged: its archive checksum is missing or invalid.");
+        put("hnmod.copyBase", "Копирование подготовленной базы в отдельный каталог сборки…", "Copying the prepared base to the separate build directory…");
+        put("hnmod.buildFailed", "Horizon Launcher завершил сборку с кодом {0}. Подробности — в журнале ниже.", "Horizon Launcher exited with code {0}. See the log below.");
+        put("hnmod.omitted", "Horizon исключил один или несколько включённых модов. Клиент не сохранён для запуска; подробности в журнале.", "Horizon omitted one or more enabled mods. The client was not saved for launch; see the log.");
+        put("hnmod.buildMissing", "Horizon Launcher не создал ожидаемую нативную сборку.", "Horizon Launcher did not produce the expected native build.");
+        put("hnmod.changedDuringBuild", "Моды изменились во время сборки. Повторите сборку.", "Mods changed during the build. Build again.");
+        put("hnmod.usingBuild", "Запуск клиента Horizon с собранными нативными модами.", "Starting the Horizon client with compiled native mods.");
+        put("hnmod.setup", "Требуется отдельно установленный официальный Horizon Launcher и подготовленная в нём версия Horizon для Minecraft 26.3. Далее выберите исполняемый файл Horizon Launcher, затем папку готовой версии внутри его versions. AgroLauncher скопирует базу в отдельный каталог; сборка может занять много времени и несколько гигабайт.", "An installed official Horizon Launcher and a Horizon version prepared for Minecraft 26.3 are required. Select the Horizon Launcher executable, then the prepared version folder in its versions directory. AgroLauncher copies the base to a separate directory; building may take substantial time and several gigabytes.");
+        put("hnmod.chooseLauncher", "Выберите исполняемый файл Horizon Launcher", "Select the Horizon Launcher executable");
+        put("hnmod.chooseBase", "Выберите подготовленную папку версии Horizon из versions", "Select the prepared Horizon version folder from versions");
+        put("hnmod.trust", "Доверяю и собрать", "Trust and build");
+        put("hnmod.trustWarning", "Официальный сборщик Horizon соберёт отдельный инстанс с модами: {0}. Нативный код и скрипты НЕ изолированы и имеют все права пользователя, включая доступ к файлам и сети. Продолжайте только если доверяете исходникам. Сборщик загружает Rust, исходники и зависимости; могут потребоваться системные инструменты C, много времени и места. Его сетевые соединения используют собственные настройки.", "The official Horizon builder will create a separate instance with mods: {0}. Native code and build scripts are NOT sandboxed and have full user permissions, including file and network access. Continue only if you trust the source. The builder downloads Rust, source and dependencies; system C tools may be required, and the build can take substantial time and space. Its network connections use their own settings.");
+        put("hnmod.done", "Нативный клиент собран. Его можно запустить через «Играть».", "The native client is built. Start it with Play.");
+        put("hnmod.advanced", "Этот мод использует trait API, зависимости, отдельные crates или post-build: прямая сборка пока их не поддерживает. Клиент с этим модом не был запущен.", "This mod uses trait APIs, dependencies, crates or post-build steps, which direct builds do not yet support. The game was not started.");
+        put("hnmod.toolMissing", "Не найден {0}. Установите его и перезапустите AgroLauncher; для Rust нужны rustc и cargo.", "{0} was not found. Install it and restart AgroLauncher; Rust needs rustc and cargo.");
+        put("hnmod.toolFailed", "Ошибка команды {0} (код {1}). Подробности в журнале сборки.", "Command {0} failed (exit code {1}). See the build log.");
+        put("hnmod.sourceChanged", "Кэш исходников Horizon изменён. Удалите только папку source внутри .agro-native-build и повторите сборку.", "The cached Horizon source changed. Delete only the source folder inside .agro-native-build and retry.");
+        put("hnmod.differentPins", "Выбранные моды закреплены за несовместимыми версиями Horizon или horizon-mixins.", "Selected mods pin incompatible Horizon or horizon-mixins revisions.");
+        put("hnmod.hooksMismatch", "Закреплённые исходники Horizon не содержат нужную версию native hooks.", "The selected Horizon source does not provide the required native hooks version.");
+        put("hnmod.resourceMismatch", "Ресурсы установленной версии Horizon несовместимы с исходниками мода. Сборка остановлена без изменения клиента.", "The installed Horizon resources are incompatible with the mod's pinned source. Build stopped without changing the client.");
+        put("hnmod.offline", "Для сборки нативных модов отключите офлайн-режим.", "Turn off offline mode to build native mods.");
 
         put("common.ok", "ОК", "OK");
         put("common.cancel", "Отмена", "Cancel");
@@ -261,12 +304,13 @@ public final class Strings {
 
         put("accounts.title", "Аккаунты", "Accounts");
         put("accounts.subtitle",
-                "Оффлайн-профиль подходит для серверов без проверки лицензии. Ely.by добавляет скины и плащи.",
-                "An offline profile works on servers without license checks. Ely.by adds skins and capes.");
+                "Выберите оффлайн-профиль, Ely.by или аккаунт Microsoft.",
+                "Choose an offline profile, Ely.by or a Microsoft account.");
         put("accounts.saved", "Сохранённые аккаунты", "Saved accounts");
         put("accounts.makeActive", "Сделать активным", "Set as active");
         put("accounts.active", "активный", "active");
         put("accounts.offline", "Оффлайн", "Offline");
+        put("accounts.microsoft", "Microsoft", "Microsoft");
         put("accounts.offlineProfile", "Оффлайн-профиль", "Offline profile");
         put("accounts.nickname", "Ник в игре", "In-game name");
         put("accounts.nicknamePlaceholder", "например, Steve", "for example, Steve");
@@ -341,8 +385,8 @@ public final class Strings {
                 "A new AgroLauncher version {0} is available. Download the update?");
         put("update.declined", "Загрузка обновления {0} отменена",
                 "Update {0} download was declined");
-        put("update.manual", "Автоматическая установка недоступна. Открыть страницу обновления на GitHub?",
-                "Automatic installation is unavailable. Open the update page on GitHub?");
+        put("update.manual", "Автоустановка недоступна в этом режиме или не настроены доверенный ключ и подписанный релиз. Открыть страницу GitHub?",
+                "Automatic installation is unavailable in this mode, or the trusted key and signed release are not configured. Open the GitHub release page?");
         put("update.downloading", "Скачивание и проверка обновления {0}…",
                 "Downloading and verifying update {0}…");
         put("update.ready", "Обновление скачано и проверено. Перезапустить лаунчер для установки?",
@@ -431,7 +475,6 @@ public final class Strings {
         put("install.fetchingDep", "Подтягиваем зависимость: {0}", "Fetching dependency: {0}");
         put("install.depNotFound", "Не найдена подходящая версия зависимости: {0}",
                 "No suitable dependency version found: {0}");
-        put("install.depError", "Ошибка зависимости {0}: {1}", "Dependency error {0}: {1}");
         put("install.stage", "Установка мода", "Installing mod");
         put("install.stage.mod", "Установка мода", "Installing mod");
         put("install.stage.resourcepack", "Установка ресурспака", "Installing resource pack");
@@ -447,6 +490,7 @@ public final class Strings {
         put("settings.appearance", "Интерфейс", "Appearance");
 
         put("settings.performance", "Производительность и очистка", "Performance and cleanup");
+        put("settings.downloadPerHost", "Соединений на сервер", "Connections per host");
         put("settings.parallelDownloads", "Параллельных загрузок", "Parallel downloads");
         put("settings.parallelDownloadsRestart", "применится после перезапуска лаунчера", "takes effect after restarting the launcher");
         put("settings.parallelDownloadsSaved", "Число параллельных загрузок сохранено; оно применится после перезапуска", "Parallel download count saved; it will take effect after restart");
@@ -667,6 +711,40 @@ public final class Strings {
 
         put("auth.oauthExpired", "Сессия Ely.by OAuth истекла; войдите заново",
                 "The Ely.by OAuth session has expired; sign in again");
+        put("microsoft.checkingOwnership", "Проверка лицензии Minecraft Java…", "Checking Minecraft Java ownership…");
+        put("microsoft.noOwnership", "У этого аккаунта нет подтверждённого доступа к Minecraft Java Edition.", "This account does not have confirmed access to Minecraft Java Edition.");
+        put("microsoft.ownershipRequiresOnline", "Для проверки лицензии Microsoft отключите офлайн-режим и подключитесь к сети.", "Go online and disable offline mode to verify Minecraft ownership.");
+        put("horizon.sessionUnsupported", "Сборка Horizon не поддерживает безопасную передачу сессии Microsoft. Обновите или пересоберите Horizon.", "This Horizon build does not support secure Microsoft session transfer. Update or rebuild Horizon.");
+        put("horizon.onlineNotice", "26.3 Rust: используется проверенная сессия Microsoft. Java-моды и шейдеры несовместимы.", "26.3 Rust: using the verified Microsoft session. Java mods and shaders are unsupported.");
+        put("microsoft.signIn", "Войти через браузер", "Sign in with browser");
+        put("microsoft.hint", "Вход в Minecraft Java через аккаунт Microsoft.",
+                "Sign in to Minecraft Java with a Microsoft account.");
+        put("microsoft.offline", "Для входа отключите офлайн-режим.", "Go online to sign in.");
+        put("microsoft.browserManualTitle", "Открыть ссылку вручную", "Open link manually");
+        put("microsoft.browserManualHint", "Браузер не открылся. Скопируйте ссылку и откройте её на этом компьютере.",
+                "The browser did not open. Copy the link and open it on this computer.");
+        put("microsoft.browserManualWarning", "Не передавайте ссылку другим. После открытия нажмите OK.",
+                "Do not share this link. Press OK after opening it.");
+        put("microsoft.browserUnavailable", "Не удалось открыть системный браузер.", "The system browser is unavailable.");
+        put("microsoft.timeout", "Время ожидания входа истекло. Попробуйте снова.", "Sign-in timed out. Try again.");
+        put("microsoft.interrupted", "Вход прерван.", "Sign-in was interrupted.");
+        put("microsoft.callbackFailed", "Не удалось получить ответ от браузера.", "Could not receive the browser callback.");
+        put("microsoft.denied", "Авторизация Microsoft отменена или отклонена.", "Microsoft authorization was cancelled or denied.");
+        put("microsoft.browserReceived", "Ответ получен. Вернитесь в AgroLauncher, чтобы завершить вход.",
+                "Response received. Return to AgroLauncher to finish signing in.");
+        put("microsoft.browserDenied", "Авторизация не выполнена. Вернитесь в AgroLauncher.",
+                "Authorization was not completed. Return to AgroLauncher.");
+        put("microsoft.signInAgain", "Сессия Microsoft истекла. Войдите заново.", "Microsoft session expired. Sign in again.");
+        put("microsoft.accountChanged", "Профиль Minecraft изменился. Войдите в нужный аккаунт заново.",
+                "The Minecraft profile changed. Sign in to the intended account again.");
+        put("microsoft.invalidResponse", "Некорректный ответ службы авторизации.", "Invalid authentication service response.");
+        put("microsoft.httpError", "Ошибка {0}: HTTP {1}.", "{0} failed: HTTP {1}.");
+        put("microsoft.xstsFailed", "Ошибка Xbox XSTS: HTTP {0}, код {1}.", "Xbox XSTS failed: HTTP {0}, code {1}.");
+        put("microsoft.appNotApproved",
+                "Minecraft Services отклонил приложение (HTTP 403). Скорее всего лаунчер еще не был одобрен Mojang. ",
+                "Minecraft Services rejected the application (HTTP 403). Most likely launcher isn't approved by Mojang yet. ");
+        put("microsoft.noProfile", "Профиль Minecraft Java не найден. Проверьте доступ к игре и создание профиля.",
+                "Minecraft Java profile not found. Check game access and profile setup.");
 
         put("jre.stageSearch", "поиск сборки", "looking up a build");
         put("jre.stageDownload", "загрузка {0}", "downloading {0}");
@@ -775,6 +853,7 @@ public final class Strings {
         put("about.autoCheck", "проверять при запуске", "check on startup");
 
         put("nav.instances", "Инстансы", "Instances");
+        put("instances.scanFailed", "Не удалось обновить список инстансов: {0}", "Could not refresh instances: {0}");
         put("instances.title", "Инстансы", "Instances");
         put("instances.subtitle", "Установленные копии игры и независимые мод-сборки",
                 "Installed game copies and independent mod builds");
@@ -856,6 +935,27 @@ public final class Strings {
         put("appearance.style.liquidGlass.hint",
                 "Полупрозрачное стекло с бликом и мягкими краями",
                 "Translucent glass with a highlight and soft edges");
+        put("appearance.style.fluent", "Fluent 2", "Fluent 2");
+        put("appearance.style.fluent.hint", "Стиль Microsoft: мягкие края, тонкие контуры и слои",
+                "Microsoft-inspired soft corners, fine outlines and layers");
+        put("appearance.style.apple", "Apple", "Apple");
+        put("appearance.style.apple.hint", "В духе macOS: сгруппированные панели и мягкие блики",
+                "macOS-inspired grouped panels and subtle highlights");
+        put("appearance.style.gnome", "GNOME", "GNOME");
+        put("appearance.style.gnome.hint", "В духе Libadwaita: скруглённые карточки и спокойные элементы",
+                "Libadwaita-inspired rounded cards and understated controls");
+        put("appearance.style.breeze", "KDE Breeze", "KDE Breeze");
+        put("appearance.style.breeze.hint", "В духе KDE: компактные формы и чёткие контуры",
+                "KDE-inspired compact forms and crisp outlines");
+        put("appearance.style.frostedGlass", "Frosted Glass", "Frosted Glass");
+        put("appearance.style.frostedGlass.hint", "Матовые панели размывают статичный фон. Анимированный GIF не размывается отдельно под панелями.",
+                "Frosted panels blur still backgrounds. Animated GIFs are not blurred separately under panels.");
+        put("appearance.style.crystalGlass", "Crystal Glass", "Crystal Glass");
+        put("appearance.style.crystalGlass.hint", "Прозрачные панели с яркими гранями и бликами",
+                "Transparent panels with bright edges and highlights");
+        put("appearance.style.glassmorphism", "Glassmorphism", "Glassmorphism");
+        put("appearance.style.glassmorphism.hint", "Скруглённые полупрозрачные панели с мягкими контурами",
+                "Rounded translucent panels with soft outlines");
         put("appearance.styleChanged", "Стиль интерфейса: {0}", "Interface style: {0}");
 
         put("mods.addFilesFilter", "Моды (.jar) и модпаки (.mrpack)", "Mods (.jar) and modpacks (.mrpack)");
@@ -896,13 +996,184 @@ public final class Strings {
         put("instances.buildsEmpty",
                 "Мод-сборки создаются на экране «Моды» → «Установленные» кнопкой «Создать снимок»",
                 "Mod builds are created on the Mods → Installed screen with the \"Create snapshot\" button");
+
+
+        put("forge.filesProcessed", "обработано файлов: {0}", "files processed: {0}");
+        put("modpack.importing", "Импорт модпака…", "Importing modpack…");
+        put("downloads.failedFiles", "Не удалось скачать файлы: {0}", "Failed to download files: {0}");
+        put("launch.preflightFailed", "Проверка перед запуском не пройдена: {0}", "Launch preflight failed: {0}");
+        put("play.errorPrefix", "ОШИБКА: {0}", "ERROR: {0}");
+        put("play.diagnosticsHeader", "Диагностика:", "Diagnostics:");
+
+
+        put("cli.themeFailed", "Не удалось применить тему: {0}", "Could not apply the theme: {0}");
+        put("cli.needVersion", "Укажите версию: --dry-run 1.20.1 [ник]", "Specify a version: --dry-run 1.20.1 [nickname]");
+        put("cli.offlineProfile", "Офлайн-профиль: {0} (UUID {1})", "Offline profile: {0} (UUID {1})");
+        put("cli.command", "Команда запуска ({0} аргументов):", "Launch command ({0} arguments):");
+        put("cli.error", "Ошибка: {0}", "Error: {0}");
+        put("cli.description", "Лаунчер Minecraft с поддержкой Forge, Fabric, Quilt, NeoForge, OptiFine и Ely.by",
+                "Minecraft launcher with Forge, Fabric, Quilt, NeoForge, OptiFine and Ely.by support");
+        put("cli.guiHint", "Запуск без аргументов открывает графический интерфейс.",
+                "Run without arguments to open the graphical interface.");
+        put("cli.arguments", "Аргументы:", "Arguments:");
+        put("cli.argHelp", "показать эту справку", "show this help");
+        put("cli.argVersion", "показать версию", "show the version");
+        put("cli.argDataDir", "  --data-dir <путь>          свой каталог данных (портативный режим)",
+                "  --data-dir <path>          custom data directory (portable mode)");
+        put("cli.argDryRun", "  --dry-run <версия> [ник]   подготовить версию и показать команду запуска",
+                "  --dry-run <version> [nick] prepare a version and print the launch command");
+        put("cli.defaultDataDir", "Каталог данных по умолчанию: {0}", "Default data directory: {0}");
+
+
+        put("units.bytes", "{0} Б", "{0} B");
+        put("units.kb", "{0} КБ", "{0} KB");
+        put("units.mb", "{0} МБ", "{0} MB");
+        put("units.gb", "{0} ГБ", "{0} GB");
+        put("units.tb", "{0} ТБ", "{0} TB");
+        put("disk.unknown", "неизвестно", "unknown");
+        put("disk.free", "свободно на диске: {0}", "free disk space: {0}");
+        put("disk.freeLow", "мало места на диске: {0}", "low disk space: {0}");
+        put("disk.insufficient", "Недостаточно места на диске: нужно {0}, свободно {1} (с запасом 256 МБ). Путь: {2}",
+                "Not enough disk space: {0} needed, {1} free (256 MB is kept in reserve). Path: {2}");
+        put("disk.downloadEstimate", "{0}: будет скачано около {1}, свободно {2}",
+                "{0}: about {1} will be downloaded, {2} free");
+
+
+        put("clone.button", "Клонировать", "Clone");
+        put("clone.title", "Клонирование: {0}", "Clone: {0}");
+        put("clone.name", "Название новой сборки", "New build name");
+        put("clone.defaultName", "{0} (копия)", "{0} (copy)");
+        put("clone.parts", "Что перенести", "What to copy");
+        put("clone.part.worlds", "Миры (saves)", "Worlds (saves)");
+        put("clone.part.mods", "Моды", "Mods");
+        put("clone.part.settings", "Настройки игры, серверы и конфиги модов", "Game options, servers and mod configs");
+        put("clone.part.resources", "Ресурспаки и шейдеры", "Resource packs and shaders");
+        put("clone.estimating", "Подсчёт размера…", "Calculating size…");
+        put("clone.estimate", "Размер копии: {0} · свободно: {1}", "Copy size: {0} · free: {1}");
+        put("clone.estimateLow", "Недостаточно места: копия {0}, свободно {1}", "Not enough space: copy {0}, free {1}");
+        put("clone.hint", "Копия появится во вкладке «Мод-сборки» и будет запускаться из своей папки.",
+                "The copy appears on the Mod builds tab and runs from its own folder.");
+        put("clone.start", "Клонировать", "Clone");
+        put("clone.running", "Клонирование «{0}»…", "Cloning \"{0}\"…");
+        put("clone.done", "Создана сборка «{0}»", "Build \"{0}\" created");
+        put("clone.failed", "Не удалось клонировать: {0}", "Cloning failed: {0}");
+        put("clone.sourceMissing", "Папка инстанса не найдена: {0}", "Instance folder not found: {0}");
+        put("clone.horizonUnsupported", "Клонирование Horizon (26.3 Rust) не поддерживается.",
+                "Cloning Horizon (26.3 Rust) is not supported.");
+
+
+        put("compat.button", "Совместимость", "Compatibility");
+        put("compat.title", "Совместимость модов: {0}", "Mod compatibility: {0}");
+        put("compat.running", "Проверка модов «{0}»…", "Checking mods of \"{0}\"…");
+        put("compat.preflightRunning", "Проверка совместимости модов…", "Checking mod compatibility…");
+        put("compat.preflightTitle", "Найдены проблемы с модами", "Mod problems found");
+        put("compat.launchAnyway", "Запустить всё равно", "Launch anyway");
+        put("compat.launchCancelled", "Запуск отменён: исправьте моды или отключите проверку в настройках",
+                "Launch cancelled: fix the mods or turn off the check in Settings");
+        put("compat.noIssues", "Проверено модов: {0}. Проблем не найдено.", "Mods checked: {0}. No problems found.");
+        put("compat.summary", "Проверено модов: {0}. Ошибок: {1}, предупреждений: {2}.",
+                "Mods checked: {0}. Errors: {1}, warnings: {2}.");
+        put("compat.severity.error", "[Ошибка]", "[Error]");
+        put("compat.severity.warning", "[Предупреждение]", "[Warning]");
+        put("compat.readFailed", "не удалось прочитать папку модов: {0}", "could not read the mods folder: {0}");
+        put("compat.noLoader", "В папке mods {0} файлов, но у инстанса {1} нет загрузчика модов; они не будут загружены.",
+                "The mods folder has {0} files, but the {1} instance has no mod loader; they will not be loaded.");
+        put("compat.wrongLoader", "мод для {0}, а инстанс использует {1}", "mod is for {0}, but the instance uses {1}");
+        put("compat.forgeOnNeoForge", "мод сделан для Forge; на NeoForge для этой версии Minecraft он может не работать",
+                "this is a Forge mod; it may not work on NeoForge for this Minecraft version");
+        put("compat.notAMod", "не найдено описание мода (возможно, это библиотека или мод старого формата)",
+                "no mod descriptor found (it may be a library or a legacy mod)");
+        put("compat.duplicate", "мод {0} установлен несколько раз; оставьте один файл",
+                "mod {0} is installed more than once; keep a single file");
+        put("compat.missingDependency", "нет обязательной зависимости {0} (нужна версия: {1})",
+                "required dependency {0} is missing (version needed: {1})");
+        put("compat.dependencyVersion", "зависимость {0} нужна версии {1}, установлена {2}",
+                "dependency {0} must be {1}, installed {2}");
+        put("compat.minecraftMismatch", "нужен Minecraft {0}, а инстанс на {1}",
+                "requires Minecraft {0}, but the instance is {1}");
+        put("compat.minecraftUnknown", "версия Minecraft инстанса неизвестна", "the instance Minecraft version is unknown");
+        put("compat.breaks", "несовместим с установленным модом {0}", "is incompatible with the installed mod {0}");
+        put("compat.conflicts", "может конфликтовать с модом {0}", "may conflict with the mod {0}");
+        put("settings.checkModsBeforeLaunch", "Проверять совместимость модов перед запуском",
+                "Check mod compatibility before launching");
+        put("settings.checkModsBeforeLaunchHint", "Загрузчик, версия Minecraft, зависимости и дубликаты проверяются офлайн по файлам модов",
+                "Loader, Minecraft version, dependencies and duplicates are checked offline from the mod files");
+
+
+        put("worlds.title", "Миры: {0}", "Worlds: {0}");
+        put("worlds.empty", "Миров пока нет. Импортируйте ZIP или папку с level.dat.",
+                "No worlds yet. Import a ZIP or a folder that contains level.dat.");
+        put("worlds.summary", "Миров: {0} · занято {1} · свободно {2}", "Worlds: {0} · {1} used · {2} free");
+        put("worlds.loadFailed", "Не удалось прочитать миры: {0}", "Could not read worlds: {0}");
+        put("worlds.details", "{0} · {1} · {2}", "{0} · {1} · {2}");
+        put("worlds.openWorld", "Папка мира", "World folder");
+        put("worlds.duplicate", "Копия", "Duplicate");
+        put("worlds.import", "Импорт…", "Import…");
+        put("worlds.export", "Экспорт…", "Export…");
+        put("worlds.importTitle", "Выберите ZIP-архив или папку мира", "Choose a ZIP archive or a world folder");
+        put("worlds.exportTitle", "Сохранить мир как ZIP", "Save world as ZIP");
+        put("worlds.zipFilter", "ZIP-архивы миров", "World ZIP archives");
+        put("worlds.copyName", "{0} - копия", "{0} - copy");
+        put("worlds.copying", "Копирование «{0}»…", "Copying \"{0}\"…");
+        put("worlds.copied", "Создана копия {0}", "Copy {0} created");
+        put("worlds.importing", "Импорт {0}…", "Importing {0}…");
+        put("worlds.imported", "Импортирован мир {0}", "World {0} imported");
+        put("worlds.exporting", "Экспорт «{0}»…", "Exporting \"{0}\"…");
+        put("worlds.exported", "Сохранено: {0}", "Saved: {0}");
+        put("worlds.deleting", "Удаление «{0}»…", "Deleting \"{0}\"…");
+        put("worlds.deleted", "Удалён мир {0}", "World {0} deleted");
+        put("worlds.overwriteConfirm", "Файл {0} уже существует. Заменить?", "{0} already exists. Replace it?");
+        put("worlds.notAWorld", "{0} не является миром этого инстанса", "{0} is not a world of this instance");
+        put("worlds.noLevelDat", "В выбранном источнике нет level.dat", "The selected source has no level.dat");
+        put("worlds.alreadyInSaves", "Этот мир уже находится в папке saves", "This world is already in the saves folder");
+        put("worlds.exportInside", "Нельзя сохранить архив внутрь папки мира", "The archive cannot be saved inside the world folder");
+        put("worlds.archiveTooLarge", "Архив слишком большой или содержит слишком много файлов",
+                "The archive is too large or contains too many files");
+        put("worlds.unsafeArchive", "Архив содержит небезопасные пути и не будет распакован",
+                "The archive contains unsafe paths and will not be extracted");
+        put("worlds.badArchive", "Повреждённый архив: {0}", "Damaged archive: {0}");
+
+
+        put("stats.tab", "Статистика", "Statistics");
+        put("stats.period", "Период", "Period");
+        put("stats.period.week", "7 дней", "7 days");
+        put("stats.period.month", "30 дней", "30 days");
+        put("stats.period.quarter", "90 дней", "90 days");
+        put("stats.period.all", "Всё время", "All time");
+        put("stats.byDay", "По дням", "By day");
+        put("stats.byInstance", "По установкам и сборкам", "By installation and build");
+        put("stats.total", "Всего: {0} · запусков: {1} · дней с игрой: {2}", "Total: {0} · sessions: {1} · days played: {2}");
+        put("stats.empty", "За этот период игр не было", "No play time in this period");
+        put("stats.minutes", "{0} мин", "{0}m");
+        put("stats.instanceDetail", "{0} · {1}% · запусков: {2} · последний раз {3}",
+                "{0} · {1}% · sessions: {2} · last played {3}");
+        put("stats.dayTooltip", "{0}: {1}, запусков: {2}", "{0}: {1}, sessions: {2}");
+        put("stats.buildLabel", "Сборка «{0}»", "Build \"{0}\"");
+        put("stats.sharedDir", "Общая папка игры", "Shared game folder");
+        put("stats.removed", "Удалённый инстанс ({0})", "Removed instance ({0})");
+        put("stats.hint", "Учитывается время с момента запуска до закрытия игры. Сессии после полуночи делятся по дням.",
+                "Time from launch until the game closes is counted. Sessions past midnight are split by day.");
     }
 
     private Strings() {
     }
 
     private static void put(String key, String russian, String english) {
-        TEXTS.put(key, new String[]{russian, english});
+        if (TEXTS.put(key, new String[]{russian, english}) != null) {
+            throw new IllegalStateException("Duplicate string key: " + key);
+        }
+    }
+
+
+    public static boolean has(String key) {
+        return TEXTS.containsKey(key);
+    }
+
+
+    public static Map<String, String[]> all() {
+        Map<String, String[]> copy = new LinkedHashMap<>();
+        TEXTS.forEach((key, value) -> copy.put(key, value.clone()));
+        return copy;
     }
 
 

@@ -48,6 +48,7 @@ public final class ModsPanel extends JPanel {
     private final ModBrowserPanel resourcePacksPanel;
     private final ModBrowserPanel shadersPanel;
     private final ModBrowserPanel modpacksPanel;
+    private final HorizonNativeModsPanel nativeModsPanel;
 
     private final DefaultListModel<ModManager.ModFile> model = new DefaultListModel<>();
     private final JList<ModManager.ModFile> modsList = new JList<>(model);
@@ -69,6 +70,7 @@ public final class ModsPanel extends JPanel {
         this.modManager = new ModManager(context.paths());
         this.buildManager = new ModBuildManager(context.paths());
         this.statusReporter = statusReporter;
+        this.nativeModsPanel = new HorizonNativeModsPanel(context, () -> context.settings().offlineMode);
 
         setOpaque(false);
         setLayout(new BorderLayout());
@@ -134,6 +136,7 @@ public final class ModsPanel extends JPanel {
         tabs.addTab(Strings.get("mods.shaders"), shadersPanel);
         tabs.addTab(Strings.get("mods.modpacks"), modpacksPanel);
         tabs.addTab(Strings.get("mods.installed"), buildInstalledSection());
+        tabs.addTab(Strings.get("hnmod.tab"), nativeModsPanel);
         tabs.addChangeListener(e -> {
             Component selected = tabs.getSelectedComponent();
             if (selected == browserPanel) {
@@ -148,6 +151,8 @@ public final class ModsPanel extends JPanel {
             } else if (selected == modpacksPanel) {
                 modpacksPanel.ensureLoaded();
                 modpacksPanel.refreshFilters();
+            } else if (selected == nativeModsPanel) {
+                nativeModsPanel.refresh();
             } else {
                 refresh();
             }
@@ -164,7 +169,10 @@ public final class ModsPanel extends JPanel {
         modsList.setOpaque(false);
         modsList.setBackground(new java.awt.Color(0, 0, 0, 0));
         modsList.setFixedCellHeight(44);
-        modsList.setCellRenderer(new ModCellRenderer());
+        modsList.setCellRenderer(new InstalledModCellRenderer<>(mod -> new InstalledModCellRenderer.Row(
+                mod.displayName(), mod.formattedSize(),
+                mod.modpack ? Strings.get("mods.modpackBadge") : Strings.get(mod.enabled ? "mods.enabled" : "mods.disabled"),
+                mod.enabled, mod.modpack)));
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         actions.setOpaque(false);
@@ -285,7 +293,10 @@ public final class ModsPanel extends JPanel {
         LoaderType loader = LoaderType.fromId(context.settings().selectedLoader);
         boolean horizon = loader == LoaderType.HORIZON;
         for (int index : new int[]{0, 2, 3, 4}) tabs.setEnabledAt(index, !horizon);
-        if (horizon && tabs.getSelectedIndex() != 1) tabs.setSelectedIndex(1);
+        tabs.setEnabledAt(5, horizon);
+        if (horizon && tabs.getSelectedIndex() != 1 && tabs.getSelectedIndex() != 5) tabs.setSelectedIndex(5);
+        if (!horizon && tabs.getSelectedIndex() == 5) tabs.setSelectedIndex(0);
+        if (horizon) nativeModsPanel.refresh();
         if (horizon) {
             loaderWarning.setText(Strings.get("horizon.noJavaMods"));
         } else if (!loader.supportsMods()) {
@@ -316,7 +327,8 @@ public final class ModsPanel extends JPanel {
                 .findFirst().orElse(null);
         java.nio.file.Path gameDir;
         if (LoaderType.fromId(context.settings().selectedLoader) == LoaderType.HORIZON) {
-            gameDir = context.horizon().instanceDir();
+            gameDir = active != null && active.loaderType() == LoaderType.HORIZON
+                    ? buildManager.gameDir(active) : context.horizon().instanceDir();
         } else if (active != null) {
             gameDir = buildManager.gameDir(active);
         } else {
@@ -825,57 +837,4 @@ public final class ModsPanel extends JPanel {
         browserPanel.shutdown();
     }
 
-    private static final class ModCellRenderer extends JPanel
-            implements javax.swing.ListCellRenderer<ModManager.ModFile> {
-
-        private final JLabel nameLabel = new JLabel();
-        private final JLabel detailsLabel = new JLabel();
-        private final JLabel stateLabel = new JLabel();
-
-        ModCellRenderer() {
-            setLayout(new BorderLayout(10, 0));
-            setBorder(BorderFactory.createEmptyBorder(5, 12, 5, 12));
-            nameLabel.setFont(AgroTheme.font(13));
-            detailsLabel.setFont(AgroTheme.font(11));
-            stateLabel.setFont(AgroTheme.boldFont(10));
-
-            JPanel texts = new JPanel();
-            texts.setOpaque(false);
-            texts.setLayout(new BoxLayout(texts, BoxLayout.Y_AXIS));
-            texts.add(nameLabel);
-            texts.add(detailsLabel);
-
-            add(texts, BorderLayout.CENTER);
-            add(stateLabel, BorderLayout.EAST);
-        }
-
-        @Override
-        public Component getListCellRendererComponent(JList<? extends ModManager.ModFile> list,
-                                                      ModManager.ModFile value, int index,
-                                                      boolean isSelected, boolean cellHasFocus) {
-            nameLabel.setText(value.displayName());
-            detailsLabel.setText(value.formattedSize());
-            if (value.modpack) {
-                stateLabel.setText(Strings.get("mods.modpackBadge"));
-                stateLabel.setForeground(AgroTheme.info());
-            } else {
-                stateLabel.setText(value.enabled ? Strings.get("mods.enabled") : Strings.get("mods.disabled"));
-                stateLabel.setForeground(value.enabled ? AgroTheme.accent() : AgroTheme.textMuted());
-            }
-
-            if (isSelected) {
-                setOpaque(true);
-                setBackground(AgroTheme.accentDeep());
-                nameLabel.setForeground(AgroTheme.textPrimary());
-                detailsLabel.setForeground(AgroTheme.accentLight());
-            } else {
-                setOpaque(false);
-                setBackground(new java.awt.Color(0, 0, 0, 0));
-                nameLabel.setForeground(value.enabled
-                        ? AgroTheme.textPrimary() : AgroTheme.textMuted());
-                detailsLabel.setForeground(AgroTheme.textMuted());
-            }
-            return this;
-        }
-    }
 }

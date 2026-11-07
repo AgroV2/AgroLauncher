@@ -78,11 +78,11 @@ public final class NativesExtractor {
                 if (isExcluded(name, excludes)) {
                     continue;
                 }
-                
+
                 if (!isNativeBinary(name)) {
                     continue;
                 }
-                
+
                 String fileName = name.substring(name.lastIndexOf('/') + 1);
                 if (fileName.isEmpty()) {
                     continue;
@@ -151,7 +151,7 @@ public final class NativesExtractor {
             perms.add(java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE);
             Files.setPosixFilePermissions(file, perms);
         } catch (IOException | UnsupportedOperationException ignored) {
-            
+
         }
     }
 }

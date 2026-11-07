@@ -78,7 +78,7 @@ public final class AssetManager {
                     : paths.assetsVirtualDir(indexId);
             materializeVirtual(virtualPairs, virtualRoot, listener);
             if (mapToResources) {
-           
+
                 return paths.assetsDir();
             }
             return virtualRoot;
@@ -117,7 +117,7 @@ public final class AssetManager {
         return target;
     }
 
-   
+
     private void materializeVirtual(List<String[]> pairs, Path virtualRoot, ProgressListener listener)
             throws IOException {
         Files.createDirectories(virtualRoot);

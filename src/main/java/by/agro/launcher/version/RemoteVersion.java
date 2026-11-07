@@ -4,7 +4,7 @@ package by.agro.launcher.version;
 public final class RemoteVersion {
 
     public final String id;
-    public final String type;      
+    public final String type;
     public final String url;
     public final String sha1;
     public final String releaseTime;

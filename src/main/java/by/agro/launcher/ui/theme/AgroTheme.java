@@ -22,19 +22,6 @@ import java.util.function.Consumer;
 
 public final class AgroTheme {
 
-    private static final int STANDARD_COMPONENT_ARC = 10;
-    private static final int MATERIAL_COMPONENT_ARC = 22;
-    private static final int LIQUID_COMPONENT_ARC = 24;
-    private static final int STANDARD_MENU_ARC = 10;
-    private static final int MATERIAL_MENU_ARC = 26;
-    private static final int LIQUID_MENU_ARC = 28;
-    private static final int STANDARD_CARD_ARC = 12;
-    private static final int MATERIAL_CARD_ARC = 30;
-    private static final int LIQUID_CARD_ARC = 34;
-    private static final int STANDARD_NAVIGATION_ARC = 9;
-    private static final int MATERIAL_NAVIGATION_ARC = 24;
-    private static final int LIQUID_NAVIGATION_ARC = 26;
-
     private static ThemePalette palette = ThemePreset.EMERALD_DARK.palette();
     private static ThemePreset activePreset = ThemePreset.EMERALD_DARK;
     private static Color[] gradientColors = new Color[0];
@@ -68,29 +55,11 @@ public final class AgroTheme {
         return interfaceStyle == InterfaceStyle.LIQUID_GLASS;
     }
 
-    public static int menuArc() {
-        return switch (interfaceStyle) {
-            case MATERIAL_YOU -> MATERIAL_MENU_ARC;
-            case LIQUID_GLASS -> LIQUID_MENU_ARC;
-            default -> STANDARD_MENU_ARC;
-        };
-    }
+    public static int menuArc() { return interfaceStyle.menuArc(); }
 
-    public static int cardArc() {
-        return switch (interfaceStyle) {
-            case MATERIAL_YOU -> MATERIAL_CARD_ARC;
-            case LIQUID_GLASS -> LIQUID_CARD_ARC;
-            default -> STANDARD_CARD_ARC;
-        };
-    }
+    public static int cardArc() { return interfaceStyle.cardArc(); }
 
-    public static int navigationArc() {
-        return switch (interfaceStyle) {
-            case MATERIAL_YOU -> MATERIAL_NAVIGATION_ARC;
-            case LIQUID_GLASS -> LIQUID_NAVIGATION_ARC;
-            default -> STANDARD_NAVIGATION_ARC;
-        };
-    }
+    public static int navigationArc() { return interfaceStyle.navigationArc(); }
 
     public static void setInterfaceStyle(InterfaceStyle style) {
         interfaceStyle = style != null ? style : InterfaceStyle.STANDARD;
@@ -426,26 +395,22 @@ public final class AgroTheme {
     }
 
     private static void applyDefaults() {
-        boolean roundedStyle = interfaceStyle != InterfaceStyle.STANDARD;
-        int componentArc = switch (interfaceStyle) {
-            case MATERIAL_YOU -> MATERIAL_COMPONENT_ARC;
-            case LIQUID_GLASS -> LIQUID_COMPONENT_ARC;
-            default -> STANDARD_COMPONENT_ARC;
-        };
-        int menuArc = menuArc();
-        UIManager.put("Component.arc", componentArc);
-        UIManager.put("Button.arc", roundedStyle ? 999 : STANDARD_COMPONENT_ARC);
-        UIManager.put("TextComponent.arc", roundedStyle ? 18 : 8);
-        UIManager.put("ProgressBar.arc", roundedStyle ? 999 : 8);
-        UIManager.put("CheckBox.arc", roundedStyle ? 8 : 5);
-        UIManager.put("TabbedPane.tabArc", roundedStyle ? 18 : STANDARD_COMPONENT_ARC);
-        UIManager.put("Menu.arc", menuArc);
-        UIManager.put("MenuItem.arc", menuArc);
-        UIManager.put("PopupMenu.arc", menuArc);
-        UIManager.put("ComboBox.arc", menuArc);
-        UIManager.put("ComboBox.popupArc", menuArc);
-        UIManager.put("TabbedPane.selectedBackground", roundedStyle ? accentDeep() : palette.bgElevated);
-        UIManager.put("Component.focusWidth", roundedStyle ? 2 : 1);
+        InterfaceStyle style = interfaceStyle;
+        UIManager.put("Component.arc", style.componentArc());
+        UIManager.put("Button.arc", style.buttonArc());
+        UIManager.put("TextComponent.arc", style.textArc());
+        UIManager.put("ProgressBar.arc", style.progressArc());
+        UIManager.put("CheckBox.arc", style.checkArc());
+        UIManager.put("TabbedPane.tabArc", style.tabArc());
+        UIManager.put("Menu.arc", style.menuArc());
+        UIManager.put("MenuItem.arc", style.menuArc());
+        UIManager.put("PopupMenu.arc", style.menuArc());
+        UIManager.put("ComboBox.arc", style == InterfaceStyle.MATERIAL_YOU || style == InterfaceStyle.LIQUID_GLASS
+                ? style.menuArc() : style.componentArc());
+        UIManager.put("ComboBox.popupArc", style.menuArc());
+        UIManager.put("TabbedPane.selectedBackground", style == InterfaceStyle.STANDARD
+                ? palette.bgElevated : accentDeep());
+        UIManager.put("Component.focusWidth", style.focusWidth());
 
         applyColors();
         applyFonts();

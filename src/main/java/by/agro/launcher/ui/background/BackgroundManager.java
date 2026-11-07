@@ -27,6 +27,13 @@ public final class BackgroundManager {
     private int cachedBlurRadius = -1;
     private boolean cachedBlurEnabled;
 
+
+    private BufferedImage frostedCache;
+    private int frostedWidth = -1, frostedHeight = -1, frostedRadius = -1;
+    private int frostedGeneration;
+    private boolean frostedPending;
+    private int failedFrostedWidth = -1, failedFrostedHeight = -1, failedFrostedRadius = -1;
+
     private String lastError;
 
     public boolean load(Settings settings) {
@@ -114,6 +121,50 @@ public final class BackgroundManager {
         return renderedCache;
     }
 
+
+
+    public BufferedImage frostedBackdrop(int width, int height, int radius, Runnable repaint) {
+        if (width <= 0 || height <= 0 || sourceImage == null || animated) return null;
+        int clampedRadius = Math.max(1, Math.min(60, radius));
+        if (frostedCache != null && width == frostedWidth && height == frostedHeight
+                && clampedRadius == frostedRadius) return frostedCache;
+        if (frostedPending || (width == failedFrostedWidth && height == failedFrostedHeight
+                && clampedRadius == failedFrostedRadius)) return null;
+        frostedPending = true;
+        int generation = frostedGeneration;
+        BufferedImage source = sourceImage;
+        int downWidth = Math.max(1, (width + 2) / 3);
+        int downHeight = Math.max(1, (height + 2) / 3);
+        int downRadius = Math.max(1, (clampedRadius + 2) / 3);
+        new javax.swing.SwingWorker<BufferedImage, Void>() {
+            @Override protected BufferedImage doInBackground() {
+                return GaussianBlur.blur(scaleToCover(source, downWidth, downHeight), downRadius);
+            }
+            @Override protected void done() {
+                frostedPending = false;
+                try {
+                    BufferedImage result = get();
+                    if (generation == frostedGeneration && source == sourceImage) {
+                        frostedCache = result;
+                        frostedWidth = width;
+                        frostedHeight = height;
+                        frostedRadius = clampedRadius;
+                    }
+                } catch (Exception e) {
+
+                    if (generation == frostedGeneration) {
+                        failedFrostedWidth = width;
+                        failedFrostedHeight = height;
+                        failedFrostedRadius = clampedRadius;
+                    }
+                    System.err.println("Unable to prepare frosted background: " + e.getClass().getSimpleName());
+                }
+                if (repaint != null) repaint.run();
+            }
+        }.execute();
+        return null;
+    }
+
     public ImageIcon animatedIcon(Settings settings) {
         if (!animated || settings.backgroundBlur) {
             return null;
@@ -143,6 +194,14 @@ public final class BackgroundManager {
     }
 
     public void invalidateCache() {
+        frostedGeneration++;
+        frostedCache = null;
+        frostedWidth = -1;
+        frostedHeight = -1;
+        frostedRadius = -1;
+        failedFrostedWidth = -1;
+        failedFrostedHeight = -1;
+        failedFrostedRadius = -1;
         renderedCache = null;
         cachedWidth = -1;
         cachedHeight = -1;

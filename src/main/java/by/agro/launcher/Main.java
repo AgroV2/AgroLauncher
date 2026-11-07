@@ -71,7 +71,7 @@ public final class Main {
                 AgroTheme.setGradient(GradientPreset.fromId(settings.gradientPreset),
                         settings.customGradientColors);
             } catch (Exception e) {
-                System.err.println("Не удалось применить тему: " + e.getMessage());
+                System.err.println(Strings.get("cli.themeFailed", e.getMessage()));
                 try {
                     UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
                 } catch (Exception ignored) {
@@ -95,7 +95,7 @@ public final class Main {
 
     private static void runDryRun(String[] args, int dryRunIndex) {
         if (dryRunIndex + 1 >= args.length) {
-            System.err.println("Укажите версию: --dry-run 1.20.1 [ник]");
+            System.err.println(Strings.get("cli.needVersion"));
             System.exit(2);
             return;
         }
@@ -120,16 +120,16 @@ public final class Main {
             };
 
             Account account = Account.offline(nickname);
-            System.out.println("Оффлайн-профиль: " + nickname + " (UUID " + account.uuid + ")");
+            System.out.println(Strings.get("cli.offlineProfile", nickname, account.uuid));
 
             List<String> command = context.gameLauncher()
                     .prepare(versionId, account, context.manifest(), listener);
 
             System.out.println();
-            System.out.println("Команда запуска (" + command.size() + " аргументов):");
+            System.out.println(Strings.get("cli.command", command.size()));
             System.out.println(Redactor.renderCommand(command));
         } catch (Exception e) {
-            System.err.println("Ошибка: " + e.getMessage());
+            System.err.println(Strings.get("cli.error", e.getMessage()));
             e.printStackTrace();
             System.exit(1);
         }
@@ -158,16 +158,16 @@ public final class Main {
 
     private static void printHelp() {
         System.out.println("AgroLauncher " + VERSION);
-        System.out.println("Лаунчер Minecraft с поддержкой Forge, Fabric, Quilt, NeoForge, OptiFine и Ely.by");
+        System.out.println(Strings.get("cli.description"));
         System.out.println();
-        System.out.println("Запуск без аргументов открывает графический интерфейс.");
+        System.out.println(Strings.get("cli.guiHint"));
         System.out.println();
-        System.out.println("Аргументы:");
-        System.out.println("  --help, -h                 показать эту справку");
-        System.out.println("  --version                  показать версию");
-        System.out.println("  --data-dir <путь>          свой каталог данных (портативный режим)");
-        System.out.println("  --dry-run <версия> [ник]   подготовить версию и показать команду запуска");
+        System.out.println(Strings.get("cli.arguments"));
+        System.out.println("  --help, -h                 " + Strings.get("cli.argHelp"));
+        System.out.println("  --version                  " + Strings.get("cli.argVersion"));
+        System.out.println(Strings.get("cli.argDataDir"));
+        System.out.println(Strings.get("cli.argDryRun"));
         System.out.println();
-        System.out.println("Каталог данных по умолчанию: " + LauncherPaths.get().root());
+        System.out.println(Strings.get("cli.defaultDataDir", LauncherPaths.get().root()));
     }
 }

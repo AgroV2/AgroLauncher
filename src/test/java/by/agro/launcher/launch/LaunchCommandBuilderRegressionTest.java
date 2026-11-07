@@ -71,6 +71,35 @@ class LaunchCommandBuilderRegressionTest {
     }
 
     @Test
+    void microsoftAccountUsesMsaUserTypeWithoutElyInjector() throws Exception {
+        LauncherPaths paths = LauncherPaths.forRoot(tempDir.resolve("microsoft"));
+        paths.ensureDirectories();
+        JsonObject base = new JsonObject();
+        base.addProperty("id", "1.21.1");
+        base.addProperty("mainClass", "net.minecraft.client.main.Main");
+        base.addProperty("minecraftArguments", "--username ${auth_player_name} --uuid ${auth_uuid} --accessToken ${auth_access_token} --userType ${user_type}");
+        base.add("libraries", new com.google.gson.JsonArray());
+        VersionResolver resolver = new VersionResolver(paths, new by.agro.launcher.core.Downloader());
+        resolver.writeVersionJson("1.21.1", base);
+        LaunchOptions options = baseOptions(resolver.resolve("1.21.1", null,
+                by.agro.launcher.core.ProgressListener.NOOP, true), paths);
+        options.account = new Account();
+        options.account.type = Account.Type.MICROSOFT;
+        options.account.username = "Player";
+        options.account.uuid = "0123456789abcdef0123456789abcdef";
+        options.account.accessToken = "minecraft-test-token";
+        assertTrue(!GameLauncher.usesElyInjector(options.account));
+        List<String> command = new LaunchCommandBuilder(paths).build(options);
+        assertEquals("msa", command.get(command.indexOf("--userType") + 1));
+        assertEquals("minecraft-test-token", command.get(command.indexOf("--accessToken") + 1));
+        assertTrue(command.stream().noneMatch(s -> s.startsWith("-javaagent:")));
+        options.account.type = Account.Type.ELY_BY;
+        assertTrue(GameLauncher.usesElyInjector(options.account));
+        options.account.type = Account.Type.ELY_BY_OAUTH;
+        assertTrue(GameLauncher.usesElyInjector(options.account));
+    }
+
+    @Test
     void quickPlayServerAddsServerAndPortArguments() throws Exception {
         LauncherPaths paths = LauncherPaths.forRoot(tempDir.resolve("quickplay"));
         paths.ensureDirectories();

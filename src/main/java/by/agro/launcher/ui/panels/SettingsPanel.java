@@ -59,11 +59,13 @@ public final class SettingsPanel extends JPanel {
     private final JSpinner widthSpinner;
     private final JSpinner heightSpinner;
     private final JSpinner downloadParallelismSpinner;
+    private final JSpinner downloadPerHostSpinner;
     private final JCheckBox metadataCacheEnabled = new JCheckBox(Strings.get("settings.metadataCacheEnabled"));
     private final JSpinner metadataCacheTtlSpinner;
     private final JCheckBox fullscreen = new JCheckBox(Strings.get("settings.fullscreen"));
     private final JCheckBox closeOnLaunch = new JCheckBox(Strings.get("settings.closeOnLaunch"));
     private final JCheckBox showConsole = new JCheckBox(Strings.get("settings.showConsole"));
+    private final JCheckBox checkModsBeforeLaunch = new JCheckBox(Strings.get("settings.checkModsBeforeLaunch"));
     private final JCheckBox optimizedFlags = new JCheckBox(Strings.get("settings.optimizedFlags"));
     private final JLabel javaStatusLabel = new JLabel(" ");
     private final JComboBox<String> proxyModeCombo = new JComboBox<>(new String[]{"NONE", "HTTP", "SOCKS"});
@@ -90,6 +92,7 @@ public final class SettingsPanel extends JPanel {
         this.widthSpinner = new JSpinner(new SpinnerNumberModel(settings.windowWidth, 320, 7680, 2));
         this.heightSpinner = new JSpinner(new SpinnerNumberModel(settings.windowHeight, 240, 4320, 2));
         this.downloadParallelismSpinner = new JSpinner(new SpinnerNumberModel(settings.downloadParallelism, 1, 32, 1));
+        this.downloadPerHostSpinner = new JSpinner(new SpinnerNumberModel(settings.downloadPerHost, 1, 32, 1));
         this.metadataCacheTtlSpinner = new JSpinner(new SpinnerNumberModel(settings.metadataCacheTtlMinutes, 1, 10080, 1));
         this.proxyPortSpinner = new JSpinner(new SpinnerNumberModel(settings.proxyPort, 1, 65535, 1));
         this.backupsPanel = new BackupsPanel(context, statusReporter);
@@ -209,6 +212,19 @@ public final class SettingsPanel extends JPanel {
         parallelRow.add(downloadParallelismSpinner);
         parallelRow.add(UiFactory.hint(Strings.get("settings.parallelDownloadsRestart")));
 
+        JPanel perHostRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        perHostRow.setOpaque(false);
+        perHostRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        perHostRow.add(UiFactory.fieldLabel(Strings.get("settings.downloadPerHost")));
+        downloadPerHostSpinner.setPreferredSize(new Dimension(72, 30));
+        downloadPerHostSpinner.addChangeListener(e -> {
+            context.settings().downloadPerHost = (Integer) downloadPerHostSpinner.getValue();
+            context.settings().save();
+            report(Strings.get("settings.parallelDownloadsSaved"));
+        });
+        perHostRow.add(downloadPerHostSpinner);
+        perHostRow.add(UiFactory.hint(Strings.get("settings.parallelDownloadsRestart")));
+
         metadataCacheEnabled.setOpaque(false);
         metadataCacheEnabled.setAlignmentX(Component.LEFT_ALIGNMENT);
         metadataCacheEnabled.addActionListener(e -> {
@@ -242,6 +258,7 @@ public final class SettingsPanel extends JPanel {
         JLabel cleanupHint = UiFactory.hint(Strings.get("settings.cleanupHint"));
         cleanupHint.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(parallelRow);
+        body.add(perHostRow);
         body.add(UiFactory.verticalGap(10));
         body.add(metadataCacheEnabled);
         body.add(UiFactory.verticalGap(4));
@@ -359,7 +376,7 @@ public final class SettingsPanel extends JPanel {
         JPanel body = UiFactory.transparentPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-        useManagedJava.setVisible(false); 
+        useManagedJava.setVisible(false);
         javaModeCombo.setAlignmentX(Component.LEFT_ALIGNMENT);
         javaModeCombo.addActionListener(e -> {
             String mode = (String) javaModeCombo.getSelectedItem();
@@ -509,7 +526,7 @@ public final class SettingsPanel extends JPanel {
         JPanel body = UiFactory.transparentPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-        for (JCheckBox box : new JCheckBox[]{optimizedFlags, closeOnLaunch, showConsole}) {
+        for (JCheckBox box : new JCheckBox[]{optimizedFlags, closeOnLaunch, showConsole, checkModsBeforeLaunch}) {
             box.setOpaque(false);
             box.setFont(AgroTheme.font(13));
             box.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -524,6 +541,11 @@ public final class SettingsPanel extends JPanel {
         });
         showConsole.addActionListener(e -> {
             context.settings().showConsole = showConsole.isSelected();
+            context.settings().save();
+        });
+        checkModsBeforeLaunch.setToolTipText(Strings.get("settings.checkModsBeforeLaunchHint"));
+        checkModsBeforeLaunch.addActionListener(e -> {
+            context.settings().checkModsBeforeLaunch = checkModsBeforeLaunch.isSelected();
             context.settings().save();
         });
 
@@ -556,6 +578,7 @@ public final class SettingsPanel extends JPanel {
         body.add(optimizedFlags);
         body.add(closeOnLaunch);
         body.add(showConsole);
+        body.add(checkModsBeforeLaunch);
         body.add(UiFactory.verticalGap(14));
         body.add(jvmLabel);
         body.add(UiFactory.verticalGap(4));
@@ -750,8 +773,10 @@ public final class SettingsPanel extends JPanel {
         fullscreen.setSelected(settings.fullscreen);
         closeOnLaunch.setSelected(settings.closeOnLaunch);
         showConsole.setSelected(settings.showConsole);
+        checkModsBeforeLaunch.setSelected(settings.checkModsBeforeLaunch);
         optimizedFlags.setSelected(settings.optimizedJvmFlags);
         downloadParallelismSpinner.setValue(settings.downloadParallelism);
+        downloadPerHostSpinner.setValue(settings.downloadPerHost);
         metadataCacheEnabled.setSelected(settings.metadataCacheEnabled);
         metadataCacheTtlSpinner.setValue(settings.metadataCacheTtlMinutes);
         metadataCacheTtlSpinner.setEnabled(settings.metadataCacheEnabled);

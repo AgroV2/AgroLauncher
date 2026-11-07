@@ -4,6 +4,7 @@ import by.agro.launcher.LauncherContext;
 import by.agro.launcher.auth.Account;
 import by.agro.launcher.auth.ElyByAuth;
 import by.agro.launcher.auth.ElyByOAuth;
+import by.agro.launcher.auth.MicrosoftAuth;
 import by.agro.launcher.auth.OfflineAuth;
 import by.agro.launcher.ui.components.AccountHeadIcons;
 import by.agro.launcher.ui.components.UiFactory;
@@ -11,6 +12,7 @@ import by.agro.launcher.i18n.Strings;
 import by.agro.launcher.ui.theme.AgroTheme;
 
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
@@ -49,6 +51,8 @@ public final class AccountsPanel extends JPanel {
     private final JLabel elyStatusLabel = new JLabel(" ");
     private final JButton elyLoginButton;
     private final JButton elyOAuthButton = UiFactory.button(Strings.get("accounts.oauth"));
+    private final JButton microsoftButton = UiFactory.primaryButton(Strings.get("microsoft.signIn"));
+    private final JLabel microsoftStatus = new JLabel(" ");
 
     public AccountsPanel(LauncherContext context, Consumer<String> statusReporter) {
         this.context = context;
@@ -80,7 +84,7 @@ public final class AccountsPanel extends JPanel {
         content.setLayout(new BorderLayout(22, 0));
 
         content.add(buildAccountListSection(), BorderLayout.WEST);
-        content.add(buildLoginForms(), BorderLayout.CENTER);
+        content.add(UiFactory.scroll(buildLoginForms()), BorderLayout.CENTER);
         return content;
     }
 
@@ -117,9 +121,87 @@ public final class AccountsPanel extends JPanel {
 
         forms.add(buildOfflineForm());
         forms.add(UiFactory.verticalGap(18));
+        forms.add(buildMicrosoftForm());
+        forms.add(UiFactory.verticalGap(18));
         forms.add(buildElyForm());
         forms.add(UiFactory.verticalGap(0));
         return forms;
+    }
+
+    private JComponent buildMicrosoftForm() {
+        JPanel card = UiFactory.titledCard(Strings.get("accounts.microsoft"));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel body = UiFactory.transparentPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.add(UiFactory.hint(Strings.get("microsoft.hint")));
+        body.add(UiFactory.verticalGap(8));
+        microsoftButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+        microsoftButton.addActionListener(e -> loginMicrosoft());
+        body.add(microsoftButton);
+        body.add(UiFactory.verticalGap(4));
+        microsoftStatus.setFont(AgroTheme.font(12));
+        body.add(microsoftStatus);
+        card.add(body, BorderLayout.CENTER);
+        return card;
+    }
+
+    private void loginMicrosoft() {
+        if (context.settings().offlineMode) {
+            microsoftStatus.setText(Strings.get("microsoft.offline"));
+            microsoftStatus.setForeground(AgroTheme.warning());
+            return;
+        }
+        microsoftButton.setEnabled(false);
+        microsoftStatus.setText(Strings.get("accounts.oauthWaiting"));
+        microsoftStatus.setForeground(AgroTheme.textSecondary());
+        new SwingWorker<Account, Void>() {
+            @Override protected Account doInBackground() throws Exception { return MicrosoftAuth.authorize(AccountsPanel.this::showMicrosoftBrowserFallback); }
+            @Override protected void done() {
+                microsoftButton.setEnabled(true);
+                try {
+                    Account account = get();
+                    context.accounts().save(account);
+                    context.settings().activeAccountId = account.id;
+                    context.settings().save();
+                    refreshAccounts();
+                    microsoftStatus.setText(Strings.get("accounts.signedIn", account.username));
+                    microsoftStatus.setForeground(AgroTheme.accentLight());
+                    report(Strings.get("accounts.signedIn", account.username));
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    String message = cause.getMessage() != null ? cause.getMessage() : Strings.get("common.error");
+                    microsoftStatus.setText(Strings.get("common.error"));
+                    microsoftStatus.setForeground(AgroTheme.error());
+                    JOptionPane.showMessageDialog(AccountsPanel.this, message, Strings.get("common.error"), JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
+    private boolean showMicrosoftBrowserFallback(java.net.URI uri) throws java.io.IOException {
+        final boolean[] proceed = {false};
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                JPanel content = new JPanel();
+                content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+                content.add(new JLabel(Strings.get("microsoft.browserManualHint")));
+                content.add(Box.createVerticalStrut(8));
+                JTextField link = new JTextField(uri.toString(), 42);
+                link.setEditable(false);
+                content.add(link);
+                link.selectAll();
+                content.add(new JLabel(Strings.get("microsoft.browserManualWarning")));
+                proceed[0] = JOptionPane.showConfirmDialog(AccountsPanel.this, content,
+                        Strings.get("microsoft.browserManualTitle"), JOptionPane.OK_CANCEL_OPTION,
+                        JOptionPane.INFORMATION_MESSAGE) == JOptionPane.OK_OPTION;
+            });
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new java.io.IOException(Strings.get("microsoft.interrupted"), e);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            throw new java.io.IOException(Strings.get("microsoft.browserUnavailable"), e);
+        }
+        return proceed[0];
     }
 
     private JComponent buildOfflineForm() {
@@ -345,7 +427,7 @@ public final class AccountsPanel extends JPanel {
         if (answer != JOptionPane.YES_OPTION) {
             return;
         }
-        if (!selected.isOffline()) {
+        if (selected.type == Account.Type.ELY_BY || selected.type == Account.Type.ELY_BY_OAUTH) {
             ElyByAuth.invalidate(selected);
         }
         context.accounts().remove(selected);
@@ -420,12 +502,14 @@ public final class AccountsPanel extends JPanel {
             nameLabel.setIconTextGap(icon == null ? 0 : 10);
             nameLabel.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
             nameLabel.setHorizontalTextPosition(javax.swing.SwingConstants.RIGHT);
-            AccountHeadIcons.load(value, context.settings(), loaded -> {
-                if (loaded != null) {
-                    accountList.revalidate();
-                    accountList.repaint();
-                }
-            });
+            if (icon == null) {
+                AccountHeadIcons.load(value, context.settings(), loaded -> {
+                    if (loaded != null) {
+                        accountList.revalidate();
+                        accountList.repaint();
+                    }
+                });
+            }
 
             boolean active = value.id != null && value.id.equals(context.settings().activeAccountId);
             activeMark.setText(active ? Strings.get("accounts.active") : "");

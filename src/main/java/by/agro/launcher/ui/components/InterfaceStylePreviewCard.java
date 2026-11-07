@@ -27,6 +27,7 @@ public final class InterfaceStylePreviewCard extends JPanel {
 
     private final InterfaceStyle style;
     private ThemePalette palette;
+    private final GlassSurface glassSurface = new GlassSurface();
 
     private boolean selected;
     private boolean hovered;
@@ -76,12 +77,17 @@ public final class InterfaceStylePreviewCard extends JPanel {
         return switch (style) {
             case MATERIAL_YOU -> 16;
             case LIQUID_GLASS -> 18;
-            default -> 6;
+            case STANDARD -> 6;
+            default -> style.cardArc();
         };
     }
 
     private int buttonArc() {
-        return style == InterfaceStyle.STANDARD ? 5 : 11;
+        return switch (style) {
+            case STANDARD -> 5;
+            case MATERIAL_YOU, LIQUID_GLASS -> 11;
+            default -> style.buttonArc();
+        };
     }
 
     @Override
@@ -103,14 +109,18 @@ public final class InterfaceStylePreviewCard extends JPanel {
         g2.fillRect(sidebarWidth - arc, 0, arc, height - 1);
 
         boolean accentButton = selected;
+        g2.setColor(palette.bgElevated);
+        g2.fillRoundRect(9, 15, 25, 16, style.navigationArc(), style.navigationArc());
         if (accentButton) {
             g2.setPaint(AgroTheme.gradientPaint(3, 16, 3, 14));
         } else {
             g2.setColor(AgroTheme.accent());
         }
-        g2.fillRoundRect(3, 16, 3, 14, 2, 2);
-        g2.setColor(palette.bgElevated);
-        g2.fillRoundRect(9, 15, 25, 16, componentArc() / 2, componentArc() / 2);
+        if (style == InterfaceStyle.BREEZE) {
+            g2.fillRoundRect(12, 29, 20, 2, 2, 2);
+        } else if (style != InterfaceStyle.APPLE && style != InterfaceStyle.GNOME) {
+            g2.fillRoundRect(3, 16, 3, 14, 2, 2);
+        }
 
         g2.setColor(palette.textMuted);
         for (int i = 0; i < 3; i++) {
@@ -122,16 +132,17 @@ public final class InterfaceStylePreviewCard extends JPanel {
         int contentWidth = width - contentX - 12;
         int contentHeight = 34;
 
-        if (style == InterfaceStyle.LIQUID_GLASS) {
+        if (style.isGlass()) {
             paintGlassBlobs(g2, contentX, contentY, contentWidth, contentHeight);
-            paintGlassPanel(g2, contentX, contentY, contentWidth, contentHeight);
+            if (style == InterfaceStyle.LIQUID_GLASS) {
+                paintGlassPanel(g2, contentX, contentY, contentWidth, contentHeight);
+            } else {
+                glassSurface.paint(g2, style, contentX, contentY, contentWidth, contentHeight, componentArc(),
+                        palette.bgPanel, AgroTheme.accent(), palette.border, 88, false);
+            }
         } else {
-            g2.setColor(palette.bgPanel);
-            g2.fillRoundRect(contentX, contentY, contentWidth, contentHeight,
-                    componentArc(), componentArc());
-            g2.setColor(palette.border);
-            g2.drawRoundRect(contentX, contentY, contentWidth, contentHeight,
-                    componentArc(), componentArc());
+            StyleVisuals.paintCard(g2, style, contentX, contentY, contentWidth + 1, contentHeight + 1,
+                    componentArc(), palette.bgPanel, palette.border);
         }
 
         g2.setColor(palette.textPrimary);
@@ -147,6 +158,7 @@ public final class InterfaceStylePreviewCard extends JPanel {
             g2.setColor(palette.accent);
         }
         g2.fillRoundRect(contentX, buttonY, 56, buttonHeight, buttonArc(), buttonArc());
+        StyleVisuals.paintButtonFinish(g2, style, contentX, buttonY, 56, buttonHeight, buttonArc(), false);
         if (style == InterfaceStyle.LIQUID_GLASS) {
             g2.setPaint(new GradientPaint(0, buttonY, new Color(255, 255, 255, 60),
                     0, buttonY + buttonHeight, new Color(255, 255, 255, 0)));

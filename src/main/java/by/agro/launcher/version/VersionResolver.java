@@ -98,7 +98,7 @@ public final class VersionResolver {
             Set<String> keysOfThisVersion = new HashSet<>();
             for (Library library : version.libraries) {
                 String key = library.groupArtifactKey();
-                
+
                 if (keysFromChildren.contains(key)) {
                     continue;
                 }
@@ -108,7 +108,7 @@ public final class VersionResolver {
             keysFromChildren.addAll(keysOfThisVersion);
         }
 
-        
+
         List<Argument> gameArguments = new ArrayList<>();
         List<Argument> jvmArguments = new ArrayList<>();
         for (int i = chain.size() - 1; i >= 0; i--) {
@@ -164,7 +164,7 @@ public final class VersionResolver {
         return null;
     }
 
-  
+
     public List<String> installedVersions() {
         List<String> result = new ArrayList<>();
         Path dir = paths.versionsDir();
@@ -185,7 +185,7 @@ public final class VersionResolver {
         return result;
     }
 
- 
+
     public void writeVersionJson(String versionId, com.google.gson.JsonObject json) throws IOException {
         Path file = paths.versionJson(versionId);
         Files.createDirectories(file.getParent());

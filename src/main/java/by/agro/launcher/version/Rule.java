@@ -73,7 +73,7 @@ public final class Rule {
 
     private boolean matches(FeatureSet featureSet) {
         if (osName != null) {
-            
+
             String current = Platform.current().mojangName();
             if (!osName.equals(current)) {
                 return false;
@@ -81,7 +81,7 @@ public final class Rule {
         }
         if (osArch != null) {
             String arch = Platform.arch();
-            
+
             String raw = System.getProperty("os.arch", "").toLowerCase();
             if (!osArch.equals(arch) && !osArch.equals(raw)) {
                 return false;
@@ -94,7 +94,7 @@ public final class Rule {
                     return false;
                 }
             } catch (PatternSyntaxException e) {
-                
+
                 return false;
             }
         }

@@ -78,7 +78,7 @@ public final class DownloadManager {
         }
         public boolean canRetry() { return status == Status.FAILED || status == Status.CANCELLED; }
 
-        private void checkpoint() throws CancelledException {
+        void checkpoint() throws CancelledException {
             if (cancelled.get()) throw new CancelledException();
             while (paused.get()) {
                 status = Status.PAUSED;

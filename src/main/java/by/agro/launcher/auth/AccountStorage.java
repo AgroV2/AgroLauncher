@@ -17,12 +17,17 @@ import java.util.List;
 public final class AccountStorage {
 
     private final LauncherPaths paths;
-    private final CredentialStore credentials = CredentialStore.system();
+    private final CredentialStore credentials;
     private final List<Account> accounts = new ArrayList<>();
     private volatile boolean secretsLoaded;
 
     public AccountStorage(LauncherPaths paths) {
+        this(paths, CredentialStore.system());
+    }
+
+    AccountStorage(LauncherPaths paths, CredentialStore credentials) {
         this.paths = paths;
+        this.credentials = java.util.Objects.requireNonNull(credentials);
         loadMetadata();
         Thread secretsThread = new Thread(this::loadSecrets, "agro-account-secrets");
         secretsThread.setDaemon(true);
@@ -45,22 +50,24 @@ public final class AccountStorage {
         return null;
     }
 
-    
-    public void save(Account account) {
+
+    public synchronized void save(Account account) {
+        awaitSecrets();
         if (account.id == null || account.id.isBlank()) {
             account.id = account.type.name().toLowerCase() + "-" + account.username.toLowerCase();
         }
+        storeSecrets(account);
         Account existing = byId(account.id);
         if (existing != null) {
             accounts.set(accounts.indexOf(existing), account);
         } else {
             accounts.add(account);
         }
-        storeSecrets(account);
         persist();
     }
 
-    public void remove(Account account) {
+    public synchronized void remove(Account account) {
+        awaitSecrets();
         accounts.removeIf(a -> a.id != null && a.id.equals(account.id));
         try { credentials.remove(account.id); } catch (Exception e) {
             System.err.println("Не удалось удалить токен из системного хранилища: " + e.getMessage());

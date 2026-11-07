@@ -6,15 +6,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpCookie;
 import java.net.HttpURLConnection;
-import java.net.InetAddress;
 import java.net.Proxy;
-import java.net.ProxySelector;
-import java.net.Socket;
 import java.net.URI;
-import java.net.URL;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,6 +35,7 @@ public final class Downloader {
     private static volatile Proxy proxy = Proxy.NO_PROXY;
 
     private final int threads;
+    private final HostLimiter hostLimiter;
     private final DownloadManager downloadManager;
     private final Map<String, Map<String, CookieRecord>> cookiesByHost = new ConcurrentHashMap<>();
     private final ExecutorService pool;
@@ -76,21 +70,32 @@ public final class Downloader {
         return proxy;
     }
 
-    private static final java.util.Map<Path, String> VERIFIED_FILES =
+    private static final java.util.Map<Path, PersistentEntry> VERIFIED_FILES =
             new java.util.concurrent.ConcurrentHashMap<>();
 
     public static final class PersistentEntry {
         public long size;
         public long mtime;
         public String sha1;
+        public String modifiedExact;
+        public String fileKey;
 
         public PersistentEntry() {
         }
 
-        PersistentEntry(long size, long mtime, String sha1) {
-            this.size = size;
-            this.mtime = mtime;
+        PersistentEntry(java.nio.file.attribute.BasicFileAttributes attrs, String sha1) {
+            this.size = attrs.size();
+            this.mtime = attrs.lastModifiedTime().toMillis();
+            this.modifiedExact = attrs.lastModifiedTime().toString();
+            this.fileKey = attrs.fileKey() == null ? "" : attrs.fileKey().toString();
             this.sha1 = sha1;
+        }
+
+        boolean matches(java.nio.file.attribute.BasicFileAttributes attrs, String expected) {
+            return attrs.isRegularFile() && attrs.size() > 0 && sha1 != null
+                    && sha1.equalsIgnoreCase(expected) && attrs.size() == size
+                    && modifiedExact != null && modifiedExact.equals(attrs.lastModifiedTime().toString())
+                    && fileKey != null && fileKey.equals(attrs.fileKey() == null ? "" : attrs.fileKey().toString());
         }
     }
 
@@ -148,47 +153,55 @@ public final class Downloader {
     }
 
     public boolean verifyOnce(Path target, String expectedSha1) {
-        if (target == null) {
-            return false;
-        }
-        if (expectedSha1 == null || expectedSha1.isBlank()) {
-            return HashUtil.verify(target, expectedSha1);
-        }
-        if (expectedSha1.equalsIgnoreCase(VERIFIED_FILES.get(target))) {
-            return true;
-        }
-        loadVerificationCache();
-        PersistentEntry entry = PERSISTENT_VERIFIED.get(target.toString());
-        if (entry != null && expectedSha1.equalsIgnoreCase(entry.sha1)) {
-            try {
-                var attrs = Files.readAttributes(target,
-                        java.nio.file.attribute.BasicFileAttributes.class);
-                if (attrs.size() == entry.size
-                        && attrs.lastModifiedTime().toMillis() == entry.mtime) {
-                    VERIFIED_FILES.put(target, expectedSha1);
+        if (target == null) return false;
+        if (expectedSha1 == null || expectedSha1.isBlank()) return HashUtil.verify(target, expectedSha1);
+        Path path = target.toAbsolutePath().normalize();
+        try {
+            var before = Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes.class);
+            if (!before.isRegularFile() || before.size() <= 0) return false;
+            boolean executable = isExecutableArtifact(path);
+            if (!executable) {
+                PersistentEntry entry = VERIFIED_FILES.get(path);
+                if (entry != null && entry.matches(before, expectedSha1)) return true;
+                loadVerificationCache();
+                entry = PERSISTENT_VERIFIED.get(path.toString());
+                if (entry != null && entry.matches(before, expectedSha1)) {
+                    VERIFIED_FILES.put(path, entry);
                     return true;
                 }
-            } catch (IOException ignored) {
-
             }
-        }
-        boolean verified = HashUtil.verify(target, expectedSha1);
-        if (verified) {
-            VERIFIED_FILES.put(target, expectedSha1);
-            if (PERSISTENT_VERIFIED.size() < MAX_PERSISTENT_ENTRIES) {
-                try {
-                    var attrs = Files.readAttributes(target,
-                            java.nio.file.attribute.BasicFileAttributes.class);
-                    PERSISTENT_VERIFIED.put(target.toString(), new PersistentEntry(
-                            attrs.size(), attrs.lastModifiedTime().toMillis(),
-                            expectedSha1.toLowerCase(java.util.Locale.ROOT)));
-                    verificationDirty = true;
-                } catch (IOException ignored) {
+            boolean verified = HashUtil.verify(path, expectedSha1);
+            var after = Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes.class);
+            PersistentEntry observed = new PersistentEntry(before, expectedSha1.toLowerCase(java.util.Locale.ROOT));
+            if (!verified || !observed.matches(after, expectedSha1)) {
+                evictVerification(path);
+                return false;
+            }
 
+            if (!executable) {
+                VERIFIED_FILES.put(path, observed);
+                if (PERSISTENT_VERIFIED.size() < MAX_PERSISTENT_ENTRIES) {
+                    PERSISTENT_VERIFIED.put(path.toString(), observed);
+                    verificationDirty = true;
                 }
             }
+            return true;
+        } catch (IOException | RuntimeException e) {
+            evictVerification(path);
+            return false;
         }
-        return verified;
+    }
+
+    private static void evictVerification(Path path) {
+        VERIFIED_FILES.remove(path);
+        if (PERSISTENT_VERIFIED.remove(path.toString()) != null) verificationDirty = true;
+    }
+
+    static boolean isExecutableArtifact(Path path) {
+        String name = path.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        return name.endsWith(".jar") || name.endsWith(".exe") || name.endsWith(".dll")
+                || name.endsWith(".so") || name.contains(".so.") || name.endsWith(".dylib")
+                || name.endsWith(".bin");
     }
 
     public Downloader() {
@@ -200,7 +213,12 @@ public final class Downloader {
     }
 
     public Downloader(int threads, DownloadManager downloadManager) {
+        this(threads, 4, downloadManager);
+    }
+
+    public Downloader(int threads, int perHost, DownloadManager downloadManager) {
         this.threads = Math.max(1, Math.min(32, threads));
+        this.hostLimiter = new HostLimiter(perHost);
         this.downloadManager = java.util.Objects.requireNonNull(downloadManager, "downloadManager");
         this.pool = Executors.newFixedThreadPool(this.threads, r -> {
             Thread t = new Thread(r, "agro-downloader");
@@ -245,6 +263,13 @@ public final class Downloader {
             return;
         }
 
+        long estimatedBytes = ensureSpaceFor(pending);
+        if (estimatedBytes > 0) {
+            Path sampleTarget = pending.get(0).target;
+            listener.onMessage(by.agro.launcher.i18n.Strings.get("disk.downloadEstimate", stageName,
+                    DiskSpace.format(estimatedBytes), DiskSpace.format(DiskSpace.usableBytes(sampleTarget))));
+        }
+
         AtomicInteger done = new AtomicInteger();
         AtomicReference<Exception> firstError = new AtomicReference<>();
         int total = pending.size();
@@ -271,8 +296,37 @@ public final class Downloader {
         }
         saveVerificationCache();
         if (firstError.get() != null) {
-            throw new IOException("Failed to download files: " + firstError.get().getMessage(), firstError.get());
+            Exception error = firstError.get();
+            if (error instanceof DiskSpace.InsufficientSpaceException space) throw space;
+            throw new IOException(by.agro.launcher.i18n.Strings.get("downloads.failedFiles", error.getMessage()), error);
         }
+    }
+
+
+    static long remainingBytes(Task task) {
+        if (task == null || task.size <= 0 || task.target == null) return 0;
+        long existing = 0;
+        try {
+            Path partial = task.target.resolveSibling(task.target.getFileName() + ".partial");
+            if (Files.isRegularFile(partial)) existing = Files.size(partial);
+        } catch (IOException | RuntimeException ignored) {
+        }
+        return Math.max(0, task.size - existing);
+    }
+
+
+    static long ensureSpaceFor(List<Task> pending) throws IOException {
+        java.util.Map<Path, Long> needed = new java.util.LinkedHashMap<>();
+        long total = 0;
+        for (Task task : pending) {
+            long bytes = remainingBytes(task);
+            if (bytes <= 0) continue;
+            Path parent = task.target.toAbsolutePath().normalize().getParent();
+            needed.merge(parent == null ? task.target : parent, bytes, Long::sum);
+            total += bytes;
+        }
+        DiskSpace.requireAll(needed);
+        return total;
     }
 
     public void download(String url, Path target, String expectedSha1) throws IOException {
@@ -283,6 +337,9 @@ public final class Downloader {
         SafeNetwork.ensureAllowedDownloadHost(url);
         if (verifyOnce(target, expectedSha1)) {
             return;
+        }
+        if (expectedSize > 0) {
+            ensureSpaceFor(List.of(new Task(url, target, expectedSha1, expectedSize)));
         }
         DownloadManager.Handle handle = downloadManager.queued(target.getFileName().toString(), url, target, expectedSize);
         download(handle, expectedSha1, expectedSize);
@@ -312,9 +369,6 @@ public final class Downloader {
                     }
                 }
                 SecureFiles.atomicReplace(temp, handle.target().toAbsolutePath().normalize());
-                if (expectedSha1 != null && !expectedSha1.isBlank()) {
-                    VERIFIED_FILES.put(handle.target().toAbsolutePath().normalize(), expectedSha1);
-                }
                 downloadManager.completed(handle);
                 return;
             } catch (IOException e) {
@@ -409,21 +463,27 @@ public final class Downloader {
     }
 
     public String getString(String url, Map<String, String> headers) throws IOException {
-        HttpClient client = metadataClient();
-        if (client != null) {
-            return getStringHttp2(client, url, headers);
-        }
         return getStringLegacy(url, headers);
     }
 
     private String getStringLegacy(String url, Map<String, String> headers) throws IOException {
-        HttpURLConnection connection = openWithRedirects(url, headers);
-        try (InputStream in = connection.getInputStream();
+        try (ConnectionLease lease = openWithRedirects(url, headers, null);
+             InputStream in = lease.connection.getInputStream();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             copyLimited(in, out, MAX_TEXT_BYTES);
             return out.toString(StandardCharsets.UTF_8);
-        } finally {
-            connection.disconnect();
+        }
+    }
+
+
+    public byte[] getBytes(String url, long maxBytes) throws IOException {
+        if (maxBytes <= 0 || maxBytes > MAX_TEXT_BYTES) throw new IOException("Invalid response limit");
+        try (ConnectionLease lease = openWithRedirects(url, Map.of(), null);
+             InputStream in = lease.connection.getInputStream();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            if (lease.connection.getContentLengthLong() > maxBytes) throw new IOException("Response exceeds size limit");
+            copyLimited(in, out, maxBytes);
+            return out.toByteArray();
         }
     }
 
@@ -443,20 +503,18 @@ public final class Downloader {
         long offset = Files.exists(target) ? Files.size(target) : 0;
         Map<String, String> requestHeaders = new java.util.LinkedHashMap<>(headers);
         if (offset > 0) requestHeaders.put("Range", "bytes=" + offset + "-");
-        HttpURLConnection connection = openWithRedirects(url, requestHeaders);
-        int code = connection.getResponseCode();
-        boolean append = offset > 0 && code == HttpURLConnection.HTTP_PARTIAL;
-        if (!append) offset = 0;
-        long contentLength = connection.getContentLengthLong();
-        if (contentLength > 0 && offset + contentLength > maxBytes) {
-            connection.disconnect(); throw new IOException("Download exceeds size limit");
-        }
-        try (InputStream in = connection.getInputStream(); OutputStream out = Files.newOutputStream(target,
-                append ? new java.nio.file.StandardOpenOption[]{java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND}
-                        : new java.nio.file.StandardOpenOption[]{java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING})) {
-            copyLimited(in, out, maxBytes - offset, handle, downloadManager);
-        } finally {
-            connection.disconnect();
+        try (ConnectionLease lease = openWithRedirects(url, requestHeaders, handle)) {
+            HttpURLConnection connection = lease.connection;
+            int code = connection.getResponseCode();
+            boolean append = offset > 0 && code == HttpURLConnection.HTTP_PARTIAL;
+            if (!append) offset = 0;
+            long contentLength = connection.getContentLengthLong();
+            if (contentLength > 0 && offset + contentLength > maxBytes) throw new IOException("Download exceeds size limit");
+            try (InputStream in = connection.getInputStream(); OutputStream out = Files.newOutputStream(target,
+                    append ? new java.nio.file.StandardOpenOption[]{java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND}
+                            : new java.nio.file.StandardOpenOption[]{java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING})) {
+                copyLimited(in, out, maxBytes - offset, handle, downloadManager);
+            }
         }
     }
 
@@ -466,16 +524,13 @@ public final class Downloader {
 
     private void transfer(String url, Path target, Map<String, String> headers, long maxBytes,
                           DownloadManager.Handle handle) throws IOException {
-        HttpURLConnection connection = openWithRedirects(url, headers);
-        long contentLength = connection.getContentLengthLong();
-        if (contentLength > maxBytes) {
-            connection.disconnect();
-            throw new IOException("Download exceeds size limit: " + contentLength + " > " + maxBytes);
-        }
-        try (InputStream in = connection.getInputStream(); OutputStream out = Files.newOutputStream(target)) {
-            copyLimited(in, out, maxBytes, handle, downloadManager);
-        } finally {
-            connection.disconnect();
+        try (ConnectionLease lease = openWithRedirects(url, headers, handle)) {
+            HttpURLConnection connection = lease.connection;
+            long contentLength = connection.getContentLengthLong();
+            if (contentLength > maxBytes) throw new IOException("Download exceeds size limit: " + contentLength + " > " + maxBytes);
+            try (InputStream in = connection.getInputStream(); OutputStream out = Files.newOutputStream(target)) {
+                copyLimited(in, out, maxBytes, handle, downloadManager);
+            }
         }
     }
 
@@ -500,113 +555,49 @@ public final class Downloader {
         return total;
     }
 
-    private static volatile HttpClient metadataHttpClient;
-
-    private HttpClient metadataClient() {
-        HttpClient existing = metadataHttpClient;
-        if (existing != null) {
-            return existing;
+    private static final class ConnectionLease implements AutoCloseable {
+        final HttpURLConnection connection;
+        final HostLimiter.Permit permit;
+        ConnectionLease(HttpURLConnection connection, HostLimiter.Permit permit) {
+            this.connection = connection; this.permit = permit;
         }
-        java.net.Proxy current = proxy;
-        if (current != java.net.Proxy.NO_PROXY && current.type() == java.net.Proxy.Type.SOCKS) {
-            return null;
+        public void close() {
+            try { connection.disconnect(); } finally { permit.close(); }
         }
-        HttpClient.Builder builder = HttpClient.newBuilder()
-                .connectTimeout(java.time.Duration.ofSeconds(20))
-                .followRedirects(HttpClient.Redirect.NEVER);
-        if (current != java.net.Proxy.NO_PROXY && current.address() instanceof java.net.InetSocketAddress address) {
-            builder.proxy(ProxySelector.of(address));
-        }
-        metadataHttpClient = builder.build();
-        return metadataHttpClient;
     }
 
-    private String getStringHttp2(HttpClient client, String url, Map<String, String> headers)
-            throws IOException {
+    private ConnectionLease openWithRedirects(String url, Map<String, String> headers,
+                                               DownloadManager.Handle handle) throws IOException {
         URI current = SafeNetwork.requirePublicHttps(url);
         for (int i = 0; i < MAX_REDIRECTS; i++) {
-            HttpRequest.Builder request = HttpRequest.newBuilder(current)
-                    .timeout(java.time.Duration.ofSeconds(30))
-                    .header("User-Agent", USER_AGENT)
-                    .header("Accept", "*/*")
-                    .GET();
-            String cookie = cookieHeader(current.getHost());
-            if (cookie != null) {
-                request.header("Cookie", cookie);
-            }
-            if (headers != null) {
-                for (Map.Entry<String, String> entry : headers.entrySet()) {
-                    if (!"cookie".equalsIgnoreCase(entry.getKey())) {
-                        request.header(entry.getKey(), entry.getValue());
-                    }
-                }
-            }
-            HttpResponse<InputStream> response;
+            HostLimiter.Permit permit = hostLimiter.acquire(current, handle);
+            HttpURLConnection connection = null;
+            boolean handedOff = false;
             try {
-                response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IOException("Interrupted while fetching " + current, e);
-            }
-            collectCookies(response.headers().map(), current);
-            int code = response.statusCode();
-            if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
-                String location = response.headers().firstValue("Location").orElse(null);
-                try (InputStream body = response.body()) {
-                    body.readAllBytes();
-                } catch (IOException ignored) {
+                connection = open(current, headers);
+                int code = connection.getResponseCode();
+                collectCookies(connection, current);
+                if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                    String location = connection.getHeaderField("Location");
+                    if (location == null || location.isBlank()) throw new IOException("Redirect response has no Location header: " + current);
+                    current = SafeNetwork.resolvePublicHttps(current, location);
+                    continue;
                 }
-                if (location == null || location.isBlank()) {
-                    throw new IOException("Redirect response has no Location header: " + current);
+                if (code < 200 || code >= 300) throw new IOException("HTTP " + code + " for " + current);
+                handedOff = true;
+                return new ConnectionLease(connection, permit);
+            } finally {
+                if (!handedOff) {
+                    try { if (connection != null) connection.disconnect(); } finally { permit.close(); }
                 }
-                current = SafeNetwork.resolvePublicHttps(current, location);
-                continue;
             }
-            if (code < 200 || code >= 300) {
-                throw new IOException("HTTP " + code + " for " + current);
-            }
-            try (InputStream in = response.body();
-                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                copyLimited(in, out, MAX_TEXT_BYTES);
-                return out.toString(StandardCharsets.UTF_8);
-            }
-        }
-        throw new IOException("Too many redirects for " + url);
-    }
-
-    private HttpURLConnection openWithRedirects(String url, Map<String, String> headers) throws IOException {
-        URI current = SafeNetwork.requirePublicHttps(url);
-        for (int i = 0; i < MAX_REDIRECTS; i++) {
-            HttpURLConnection connection = open(current, headers);
-            int code = connection.getResponseCode();
-            collectCookies(connection, current);
-            if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
-                String location = connection.getHeaderField("Location");
-                connection.disconnect();
-                if (location == null || location.isBlank()) {
-                    throw new IOException("Redirect response has no Location header: " + current);
-                }
-                current = SafeNetwork.resolvePublicHttps(current, location);
-                continue;
-            }
-            if (code < 200 || code >= 300) {
-                connection.disconnect();
-                throw new IOException("HTTP " + code + " for " + current);
-            }
-            return connection;
         }
         throw new IOException("Too many redirects for " + url);
     }
 
     private HttpURLConnection open(URI uri, Map<String, String> headers) throws IOException {
 
-        SafeNetwork.resolveAndValidate(uri);
-        URL parsed = uri.toURL();
-        HttpURLConnection connection = (HttpURLConnection) parsed.openConnection(proxy);
-        if (proxy == Proxy.NO_PROXY && connection instanceof javax.net.ssl.HttpsURLConnection https) {
-            SafeNetwork.pinConnection(https, uri);
-        }
-        connection.setInstanceFollowRedirects(false);
+        HttpURLConnection connection = SafeNetwork.openConnection(uri, proxy);
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
         connection.setReadTimeout(READ_TIMEOUT_MS);
         connection.setRequestProperty("User-Agent", USER_AGENT);
@@ -647,7 +638,7 @@ public final class Downloader {
                         }
                     }
                 } catch (IllegalArgumentException ignored) {
-                 
+
                 }
             }
         }

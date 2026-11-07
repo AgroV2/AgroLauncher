@@ -33,16 +33,20 @@ public final class HorizonManager {
     private final Downloader downloader;
     private final Settings settings;
     private final GameLauncher vanilla;
+    private final HorizonNativeMods nativeMods;
 
     public HorizonManager(LauncherPaths paths, Downloader downloader, Settings settings, GameLauncher vanilla) {
         this.paths = paths;
         this.downloader = downloader;
         this.settings = settings;
         this.vanilla = vanilla;
+        this.nativeMods = new HorizonNativeMods(root().resolve("native-selection"), root());
     }
 
     public Path root() { return paths.root().resolve("horizon"); }
     public Path instanceDir() { return paths.installationGameDir(MINECRAFT_VERSION, "horizon", "default"); }
+    public HorizonNativeMods nativeMods(Path gameDir) { return new HorizonNativeMods(gameDir, root()); }
+    public HorizonNativeMods nativeMods() { return nativeMods; }
 
     static String platformArchive(Platform platform, String arch) throws IOException {
         if (platform == Platform.LINUX && "x64".equals(arch)) return "horizon-linux-x86_64.tar.gz";
@@ -267,7 +271,7 @@ public final class HorizonManager {
         listener.onMessage(Strings.get("horizon.manifestDownload"));
         String url = "https://piston-meta.mojang.com/v1/packages/" + pinned + "/" + MINECRAFT_VERSION + ".json";
         download.download(url, destination, pinned);
-        // Do not rely on download caches or injected transports for the trust decision.
+
         if (!Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) || !HashUtil.verify(destination, pinned)) {
             throw new IOException(Strings.get("horizon.manifestMismatch"));
         }
@@ -302,20 +306,85 @@ public final class HorizonManager {
         }
     }
 
+
+    public Path downloadNativeBuilder(Path destination, ProgressListener listener) throws IOException {
+        final String tag = "launcher@0.2.44";
+        final String url = "https://github.com/horizon-rust/horizon/releases/download/launcher%400.2.44/";
+        String arch = Platform.arch(); Platform platform = Platform.current(); String archive;
+        if (platform == Platform.LINUX && "x64".equals(arch)) archive = "horizon-launcher-linux-x86_64.tar.gz";
+        else if (platform == Platform.WINDOWS && "x64".equals(arch)) archive = "horizon-launcher-windows-x64.zip";
+        else if (platform == Platform.OSX && "arm64".equals(arch)) archive = "horizon-launcher-macos-arm64.zip";
+        else if (platform == Platform.OSX && "x64".equals(arch)) archive = "horizon-launcher-macos-x64.zip";
+        else throw new IOException(Strings.get("horizon.platformUnsupported", platform, arch));
+        SecureFiles.rejectSymlinkParents(destination); Files.createDirectories(destination);
+        listener.onMessage(Strings.get("hnmod.builderDownload"));
+        String sums = downloader.getString(url + "SHA256SUMS"), signatures = downloader.getString(url + "SHA256SUMS.sig");
+        if (!HorizonSignature.verify(tag, sums.getBytes(StandardCharsets.UTF_8), signatures)) throw new IOException(Strings.get("horizon.badSignature"));
+        String hash = HorizonSignature.parseSums(sums).get(archive);
+        if (hash == null) throw new IOException(Strings.get("horizon.missingArchive", archive));
+        Path file = destination.resolve(archive);
+        downloader.downloadVerified(url + archive, file, "SHA-256", hash, 512L * 1024 * 1024);
+        Path unpacked = destination.resolve("unpacked");
+        if (archive.endsWith(".zip")) ArchiveExtractor.unzip(file, unpacked); else ArchiveExtractor.untarGz(file, unpacked);
+        String expected = executable("horizon-launcher");
+        Path tool;
+        try (var files = Files.walk(unpacked)) {
+            var matches = files.filter(p -> p.getFileName().toString().equals(expected)
+                    && Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS)).toList();
+            if (matches.size() != 1) throw new IOException(Strings.get("hnmod.launcherInvalid"));
+            tool = matches.get(0);
+        }
+        SecureFiles.rejectSymlinkParents(tool); ArchiveExtractor.makeExecutable(tool);
+        return tool;
+    }
+
+    public synchronized Path prepareNativeBase(VersionManifest manifest, ProgressListener listener) throws IOException {
+        Path base = ensureInstalled(listener);
+        ensurePrepared(base, manifest, listener);
+        return base;
+    }
+
     public synchronized GameProcess launch(Account account, VersionManifest manifest, ProgressListener listener,
                                            Consumer<String> onLine, IntConsumer onExit, String server) throws IOException {
         if (account == null || account.username == null || account.username.isBlank()) {
             throw new IOException(Strings.get("play.needAccount"));
         }
-        Path build = ensureInstalled(listener);
-        Path prepared = ensurePrepared(build, manifest, listener);
-        Path gameDir = instanceDir();
+        boolean microsoft = account.type == Account.Type.MICROSOFT;
+        if (microsoft) {
+            listener.onMessage(Strings.get("microsoft.checkingOwnership"));
+            vanilla.requireMicrosoftOwnership(account);
+        }
+        by.agro.launcher.mods.ModBuildManager manager = new by.agro.launcher.mods.ModBuildManager(paths);
+        var active = manager.list().stream().filter(b -> b.id.equals(settings.selectedModBuildId)
+                && b.loaderType() == by.agro.launcher.loaders.LoaderType.HORIZON).findFirst().orElse(null);
+        if (active == null && settings.selectedModBuildId != null && !settings.selectedModBuildId.isBlank())
+            throw new IOException(Strings.get("hnmod.instanceMissing"));
+        Path gameDir = active == null ? instanceDir() : manager.gameDir(active);
+        Path build = active == null ? null : nativeMods(gameDir).builtClient();
+        if (active != null && build == null) throw new IOException(Strings.get("hnmod.needsBuild"));
+        Path prepared;
+        if (build == null) {
+            build = ensureInstalled(listener);
+            prepared = ensurePrepared(build, manifest, listener);
+        } else {
+            prepared = resources(build);
+            listener.onMessage(Strings.get("hnmod.usingBuild"));
+        }
         SecureFiles.rejectSymlinkParents(gameDir);
         for (String folder : List.of("saves", "resourcepacks", "screenshots", "horizon")) {
             Files.createDirectories(gameDir.resolve(folder));
         }
-        listener.onMessage(Strings.get("horizon.offlineNotice"));
-        List<String> command = launchCommand(build, prepared, gameDir, account.username, settings, server);
+        List<String> command;
+        byte[] sessionBytes = null;
+        if (microsoft) {
+            command = authenticatedLaunchCommand(build, prepared, gameDir, settings, server);
+            HorizonSession.requireOptions(HorizonSession.supportedOptions(build.resolve(executable("horizon-client")), build), command.subList(1, command.size()));
+            sessionBytes = HorizonSession.session(account);
+            listener.onMessage(Strings.get("horizon.onlineNotice"));
+        } else {
+            listener.onMessage(Strings.get("horizon.offlineNotice"));
+            command = launchCommand(build, prepared, gameDir, account.username, settings, server);
+        }
         Map<String, String> environment = new HashMap<>(vanilla.userEnvironment());
         if (Platform.isLinux() && !System.getenv().containsKey("PIPEWIRE_PROPS")) {
             environment.putIfAbsent("PIPEWIRE_PROPS", "{ application.name = \"Horizon\" media.role = \"Game\" }");
@@ -330,7 +399,14 @@ public final class HorizonManager {
                 session.close();
                 if (onExit != null) onExit.accept(code);
             }, session, environment);
-            process.raw().getOutputStream().close();
+            try (var input = process.raw().getOutputStream()) {
+                if (sessionBytes != null) { input.write(sessionBytes); input.flush(); }
+            } catch (IOException e) {
+                process.kill();
+                throw new IOException(Strings.get("horizon.sessionUnsupported"), e);
+            } finally {
+                if (sessionBytes != null) java.util.Arrays.fill(sessionBytes, (byte) 0);
+            }
             return process;
         } catch (IOException e) {
             session.close();
@@ -346,6 +422,17 @@ public final class HorizonManager {
         else command.addAll(List.of("--width", Integer.toString(Math.max(320, settings.windowWidth)),
                 "--height", Integer.toString(Math.max(240, settings.windowHeight))));
         if (server != null && !server.isBlank()) command.addAll(List.of("--server", server.trim()));
+        return command;
+    }
+
+    static List<String> authenticatedLaunchCommand(Path build, Path resources, Path gameDir, Settings settings, String server) {
+        List<String> command = new ArrayList<>(List.of(build.resolve(executable("horizon-client")).toString(),
+                "--resources", resources.toString(), "--game-dir", gameDir.toString(),
+                "--home", gameDir.resolve("horizon").toString(), "--session-stdin"));
+        if (settings.fullscreen) command.add("--fullscreen");
+        else command.addAll(List.of("--width", Integer.toString(Math.max(320, settings.windowWidth)),
+                "--height", Integer.toString(Math.max(240, settings.windowHeight))));
+        if (server != null && !server.isBlank()) command.addAll(List.of("--quickPlayMultiplayer", server.trim()));
         return command;
     }
 

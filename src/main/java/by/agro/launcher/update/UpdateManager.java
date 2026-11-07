@@ -19,12 +19,12 @@ import java.util.jar.JarFile;
 
 public final class UpdateManager {
     private static final long MAX_ARTIFACT_BYTES = 512L * 1024 * 1024;
-    private static final long MAX_CHECKSUM_BYTES = 1024L * 1024;
 
     private UpdateManager() { }
 
     public record Installation(Path target, boolean portable, String description) { }
-    public record StagedUpdate(UpdateChecker.Release release, Installation installation, Path stagedFile) { }
+    public record StagedUpdate(UpdateChecker.Release release, Installation installation, Path stagedFile,
+                               String sha256, long size) { }
 
     public static Installation currentInstallation() {
         try {
@@ -46,40 +46,58 @@ public final class UpdateManager {
         }
     }
 
+    interface SignedUpdateSource {
+        byte[] read(String url, long limit) throws IOException;
+        void download(String url, Path target, String sha256, long limit) throws IOException;
+    }
+
     public static StagedUpdate stage(Downloader downloader, UpdateChecker.Release release,
                                      Installation installation) throws IOException {
         if (release == null || release.asset() == null) throw new IOException("No compatible update artifact");
         if (installation == null) throw new IOException("Automatic update is unavailable for this launch mode");
-        Path target = installation.target().toAbsolutePath().normalize();
-        Path parent = target.getParent();
-        if (parent == null || !Files.isDirectory(parent) || !Files.isWritable(parent)) {
-            throw new IOException("Launcher directory is not writable: " + parent);
-        }
-        Path staged = parent.resolve(target.getFileName() + ".update");
-        Files.deleteIfExists(staged);
-        downloader.download(release.asset().downloadUrl(), staged, null, release.asset().size());
-        if (Files.size(staged) <= 0 || Files.size(staged) > MAX_ARTIFACT_BYTES) {
-            Files.deleteIfExists(staged);
-            throw new IOException("Invalid update artifact size");
-        }
-        verifyChecksum(downloader, release, staged);
-        validateJar(staged);
-        return new StagedUpdate(release, installation, staged);
+        if (release.manifestAsset() == null || release.signatureAsset() == null)
+            throw new IOException("Signed update manifest or signature is missing; use the release page for a manual update");
+        var key = UpdateSignature.trustedKey();
+        return stageWithKey(release, installation, key, new SignedUpdateSource() {
+            public byte[] read(String url, long limit) throws IOException { return downloader.getBytes(url, limit); }
+            public void download(String url, Path target, String hash, long limit) throws IOException {
+                downloader.downloadVerified(url, target, "SHA-256", hash, limit);
+            }
+        });
     }
 
-    static void verifyChecksum(Downloader downloader, UpdateChecker.Release release, Path staged) throws IOException {
-        UpdateChecker.Asset checksum = release.checksumAsset();
-        if (checksum == null) return;
-        String text = downloader.getString(checksum.downloadUrl());
-        if (text.getBytes(StandardCharsets.UTF_8).length > MAX_CHECKSUM_BYTES) {
-            throw new IOException("Checksum file is too large");
-        }
-        String expected = checksumFor(text, release.asset().name());
-        if (expected == null) throw new IOException("Checksum for " + release.asset().name() + " was not found");
-        String actual = HashUtil.digest(staged, "SHA-256");
-        if (!expected.equalsIgnoreCase(actual)) {
+
+    static StagedUpdate stageWithKey(UpdateChecker.Release release, Installation installation,
+                                     java.security.PublicKey key, SignedUpdateSource source) throws IOException {
+        if (release == null || release.asset() == null || release.manifestAsset() == null || release.signatureAsset() == null)
+            throw new IOException("Signed update metadata is missing");
+        if (installation == null) throw new IOException("Automatic update is unavailable for this launch mode");
+        try {
+            if (UpdateChecker.compare(release.version(), by.agro.launcher.core.LauncherVersion.VERSION) <= 0)
+                throw new IOException("Refusing update to an older or identical version");
+        } catch (IllegalArgumentException e) { throw new IOException("Invalid update version", e); }
+        byte[] manifest = source.read(release.manifestAsset().downloadUrl(), 4096);
+        byte[] signature = source.read(release.signatureAsset().downloadUrl(), 64);
+        var signed = UpdateSignature.verify(manifest, signature, key, release.version(), release.asset().name());
+        if (signed.size() > MAX_ARTIFACT_BYTES || (release.asset().size() > 0 && release.asset().size() != signed.size()))
+            throw new IOException("Signed update size does not match release");
+        Path target = installation.target().toAbsolutePath().normalize();
+        by.agro.launcher.core.SecureFiles.rejectSymlinkParents(target);
+        Path parent = target.getParent();
+        if (parent == null || !Files.isDirectory(parent) || !Files.isWritable(parent))
+            throw new IOException("Launcher directory is not writable: " + parent);
+        Path staged = parent.resolve(target.getFileName() + ".update");
+        by.agro.launcher.core.SecureFiles.rejectSymlinkParents(staged);
+        Files.deleteIfExists(staged);
+        try {
+            source.download(release.asset().downloadUrl(), staged, signed.sha256(), signed.size());
+            if (Files.size(staged) != signed.size() || !HashUtil.verifySha256(staged, signed.sha256()))
+                throw new IOException("Signed update size or SHA-256 mismatch");
+            validateJar(staged);
+            return new StagedUpdate(release, installation, staged, signed.sha256(), signed.size());
+        } catch (IOException e) {
             Files.deleteIfExists(staged);
-            throw new IOException("SHA-256 checksum mismatch for update artifact");
+            throw e;
         }
     }
 
@@ -114,6 +132,12 @@ public final class UpdateManager {
     public static Process installAndRestart(StagedUpdate update, List<String> applicationArgs) throws IOException {
         Path target = update.installation().target().toAbsolutePath().normalize();
         Path staged = update.stagedFile().toAbsolutePath().normalize();
+        by.agro.launcher.core.SecureFiles.rejectSymlinkParents(staged);
+        if (update.sha256() == null || !update.sha256().matches("[0-9a-f]{64}") || update.size() <= 0
+                || update.size() > MAX_ARTIFACT_BYTES
+                || !Files.isRegularFile(staged, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                || Files.size(staged) != update.size() || !HashUtil.verifySha256(staged, update.sha256()))
+            throw new IOException("Staged update changed after verification");
         Path backup = target.resolveSibling(target.getFileName() + ".backup");
         Path script = target.resolveSibling(Platform.isWindows() ? ".agro-update.cmd" : ".agro-update.sh");
         List<String> restart = new ArrayList<>();

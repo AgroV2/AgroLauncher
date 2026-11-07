@@ -19,7 +19,7 @@ public final class JavaRequirement {
         }
         int[] parsed = parseNumeric(versionId);
         if (parsed == null) {
-        
+
             return JAVA_25;
         }
         int minor = parsed[0];
@@ -37,7 +37,7 @@ public final class JavaRequirement {
         return JAVA_17;
     }
 
- 
+
     private static int[] parseNumeric(String versionId) {
         String[] parts = versionId.split("\\.");
         if (parts.length < 2 || !"1".equals(parts[0].trim())) {
@@ -58,13 +58,13 @@ public final class JavaRequirement {
         }
     }
 
-  
+
     public static int normalize(int majorVersion) {
-     
+
         return majorVersion > 0 ? majorVersion : JAVA_21;
     }
 
- 
+
     public static int[] supportedVersions() {
         return SUPPORTED.clone();
     }

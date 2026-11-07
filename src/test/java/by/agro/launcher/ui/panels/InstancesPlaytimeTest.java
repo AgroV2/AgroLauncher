@@ -27,11 +27,11 @@ class InstancesPlaytimeTest {
             Files.writeString(instance.resolve(".agrolauncher-playtime.json"), "{\"totalMs\":7200000}");
             AtomicReference<InstancesPanel> ref = new AtomicReference<>();
             SwingUtilities.invokeAndWait(() -> ref.set(new InstancesPanel(context, null, null)));
-            SwingUtilities.invokeAndWait(() -> { });
             InstancesPanel panel = ref.get();
             Field modelField = InstancesPanel.class.getDeclaredField("installationsModel");
             modelField.setAccessible(true);
             @SuppressWarnings("unchecked") var model = (DefaultListModel<InstancesPanel.Installation>) modelField.get(panel);
+            waitFor(() -> model.size() == 1);
             SwingUtilities.invokeAndWait(() -> {
                 assertEquals(1, model.size());
                 assertEquals("26.3 Rust · Horizon", model.get(0).title());
@@ -40,6 +40,7 @@ class InstancesPlaytimeTest {
             });
             context.gameLauncher().recordPlayTime(instance, 60000);
             panel.refresh();
+            waitFor(() -> model.size() == 1 && model.get(0).playtimeMs == 7260000);
             SwingUtilities.invokeAndWait(() -> {
                 assertEquals(7260000, model.get(0).playtimeMs);
             });
@@ -49,4 +50,15 @@ class InstancesPlaytimeTest {
             singleton.set(null, previous);
         }
     }
+    private static void waitFor(java.util.function.BooleanSupplier condition) throws Exception {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(8);
+        while (System.nanoTime() < deadline) {
+            java.util.concurrent.atomic.AtomicBoolean ready = new java.util.concurrent.atomic.AtomicBoolean();
+            SwingUtilities.invokeAndWait(() -> ready.set(condition.getAsBoolean()));
+            if (ready.get()) return;
+            Thread.sleep(20);
+        }
+        fail("Timed out waiting for asynchronous scan");
+    }
+
 }

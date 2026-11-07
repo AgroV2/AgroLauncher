@@ -4,6 +4,8 @@ import by.agro.launcher.LauncherContext;
 import by.agro.launcher.core.Json;
 import by.agro.launcher.core.Settings;
 import by.agro.launcher.i18n.Strings;
+import by.agro.launcher.instances.InstanceCloner;
+import by.agro.launcher.mods.ModCompatibilityChecker;
 import by.agro.launcher.loaders.LoaderType;
 import by.agro.launcher.mods.ModBuildManager;
 import by.agro.launcher.ui.components.UiFactory;
@@ -38,9 +40,20 @@ import java.util.function.Consumer;
 
 public final class InstancesPanel extends JPanel {
 
+    private static final java.util.concurrent.ExecutorService SCANNER =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "agro-instance-scanner");
+                t.setDaemon(true);
+                return t;
+            });
+    private final java.util.concurrent.atomic.AtomicLong refreshGeneration = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong cacheGeneration = new java.util.concurrent.atomic.AtomicLong();
+    private final Object cacheGuard = new Object();
     private final LauncherContext context;
     private final Consumer<String> statusReporter;
     private final Runnable onSelectionApplied;
+    record ScanResult(List<Installation> installations, List<ModBuildManager.ModBuild> builds) { }
+    private final java.util.function.Supplier<ScanResult> scanLoader;
 
     private final DefaultListModel<Installation> installationsModel = new DefaultListModel<>();
     private final JList<Installation> installationsList = new JList<>(installationsModel);
@@ -53,13 +66,27 @@ public final class InstancesPanel extends JPanel {
     private final JButton deleteInstallationButton = UiFactory.dangerButton(Strings.get("common.delete"));
     private final JButton playBuildButton = UiFactory.primaryButton(Strings.get("instances.play"));
     private final JButton openBuildButton = UiFactory.button(Strings.get("common.openFolder"));
+    private final JButton cloneInstallationButton = UiFactory.button(Strings.get("clone.button"));
+    private final JButton compatInstallationButton = UiFactory.button(Strings.get("compat.button"));
+    private final JButton worldsBuildButton = UiFactory.button(Strings.get("instances.worlds"));
+    private final JButton cloneBuildButton = UiFactory.button(Strings.get("clone.button"));
+    private final JButton compatBuildButton = UiFactory.button(Strings.get("compat.button"));
     private final JLabel summaryLabel = new JLabel(" ");
+    private final JTabbedPane tabs = new JTabbedPane();
+    private PlayStatsPanel statsPanel;
 
     public InstancesPanel(LauncherContext context, Consumer<String> statusReporter,
                           Runnable onSelectionApplied) {
+        this(context, statusReporter, onSelectionApplied, null);
+    }
+
+    InstancesPanel(LauncherContext context, Consumer<String> statusReporter, Runnable onSelectionApplied,
+                   java.util.function.Supplier<ScanResult> scanLoader) {
         this.context = context;
         this.statusReporter = statusReporter;
         this.onSelectionApplied = onSelectionApplied;
+        this.scanLoader = scanLoader != null ? scanLoader : () -> new ScanResult(scanInstallations(),
+                new ModBuildManager(context.paths()).list());
 
         setOpaque(false);
         setLayout(new BorderLayout());
@@ -76,14 +103,22 @@ public final class InstancesPanel extends JPanel {
         header.add(subtitle);
         header.add(UiFactory.verticalGap(14));
 
-        JTabbedPane tabs = new JTabbedPane();
         tabs.setOpaque(false);
         tabs.addTab(Strings.get("instances.installations"), buildInstallationsTab());
         tabs.addTab(Strings.get("instances.builds"), buildBuildsTab());
+        if (context != null) {
+            statsPanel = new PlayStatsPanel(new by.agro.launcher.stats.PlayStatsStore(context.paths().root()),
+                    this::statsLabel);
+            tabs.addTab(Strings.get("stats.tab"), statsPanel);
+            tabs.addChangeListener(e -> {
+                if (tabs.getSelectedComponent() == statsPanel) statsPanel.refresh();
+            });
+        }
 
         add(header, BorderLayout.NORTH);
         add(tabs, BorderLayout.CENTER);
 
+        updateActionButtons();
         refresh();
     }
 
@@ -99,20 +134,17 @@ public final class InstancesPanel extends JPanel {
 
         playInstallationButton.addActionListener(e -> playSelectedInstallation());
         openInstallationButton.addActionListener(e -> openSelectedInstallation());
-        worldsButton.addActionListener(e -> openContentDialog(false));
+        worldsButton.addActionListener(e -> openWorlds(selectedInstallationTarget()));
         screenshotsButton.addActionListener(e -> openContentDialog(true));
         deleteInstallationButton.addActionListener(e -> deleteSelectedInstallation());
+        cloneInstallationButton.addActionListener(e -> cloneTarget(selectedInstallationTarget()));
+        compatInstallationButton.addActionListener(e -> checkCompatibility(selectedInstallationTarget()));
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        actions.setOpaque(false);
         JButton reload = UiFactory.button(Strings.get("common.refresh"));
         reload.addActionListener(e -> refresh());
-        actions.add(playInstallationButton);
-        actions.add(openInstallationButton);
-        actions.add(worldsButton);
-        actions.add(screenshotsButton);
-        actions.add(deleteInstallationButton);
-        actions.add(reload);
+        JPanel actions = actionRows(
+                new JButton[]{playInstallationButton, openInstallationButton, worldsButton, screenshotsButton},
+                new JButton[]{cloneInstallationButton, compatInstallationButton, deleteInstallationButton, reload});
 
         JPanel bottom = UiFactory.transparentPanel();
         bottom.setLayout(new BorderLayout(0, 8));
@@ -138,14 +170,16 @@ public final class InstancesPanel extends JPanel {
 
         playBuildButton.addActionListener(e -> playSelectedBuild());
         openBuildButton.addActionListener(e -> openSelectedBuild());
+        worldsBuildButton.addActionListener(e -> openWorlds(selectedBuildTarget()));
+        cloneBuildButton.addActionListener(e -> cloneTarget(selectedBuildTarget()));
+        compatBuildButton.addActionListener(e -> checkCompatibility(selectedBuildTarget()));
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        actions.setOpaque(false);
         JButton reload = UiFactory.button(Strings.get("common.refresh"));
         reload.addActionListener(e -> refresh());
-        actions.add(playBuildButton);
-        actions.add(openBuildButton);
-        actions.add(reload);
+        JPanel actions = actionRows(
+                new JButton[]{playBuildButton, openBuildButton, worldsBuildButton},
+                new JButton[]{cloneBuildButton, compatBuildButton, reload});
+        actions.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         card.add(UiFactory.scroll(buildsList), BorderLayout.CENTER);
         JPanel buildsBottom = UiFactory.transparentPanel();
@@ -161,36 +195,61 @@ public final class InstancesPanel extends JPanel {
     }
 
     public void refresh() {
-        SwingUtilities.invokeLater(() -> {
-            Path previouslySelected = installationsList.getSelectedValue() == null
-                    ? null : installationsList.getSelectedValue().gameDir;
-            List<Installation> installations = scanInstallations();
-            installationsModel.clear();
-            for (Installation installation : installations) {
-                installationsModel.addElement(installation);
+        long generation = refreshGeneration.incrementAndGet();
+        SCANNER.execute(() -> {
+            if (generation != refreshGeneration.get()) return;
+            final ScanResult result;
+            try { result = scanLoader.get(); }
+            catch (RuntimeException error) {
+                SwingUtilities.invokeLater(() -> {
+                    if (generation == refreshGeneration.get()) report(Strings.get("instances.scanFailed", error.getMessage()));
+                });
+                return;
             }
-
-            buildsModel.clear();
-            for (ModBuildManager.ModBuild build : new ModBuildManager(context.paths()).list()) {
-                buildsModel.addElement(build);
-            }
-
-            if (installations.isEmpty()) {
-                summaryLabel.setText(Strings.get("instances.empty"));
-            } else {
-                summaryLabel.setText(Strings.get("instances.summary", installations.size()));
-            }
-
-            installationsList.clearSelection();
-            for (int i = 0; i < installationsModel.size(); i++) {
-                Installation candidate = installationsModel.get(i);
-                if ((previouslySelected != null && candidate.gameDir.equals(previouslySelected))
-                        || (previouslySelected == null && i == 0)) {
-                    installationsList.setSelectedIndex(i);
-                    break;
+            List<Installation> installations = result.installations();
+            List<ModBuildManager.ModBuild> builds = result.builds();
+            Path spaceTarget = context == null ? null : context.paths().instancesDir();
+            long freeBytes = spaceTarget == null ? -1 : by.agro.launcher.core.DiskSpace.usableBytes(spaceTarget);
+            SwingUtilities.invokeLater(() -> {
+                if (generation != refreshGeneration.get()) return;
+                Path selectedPath = installationsList.getSelectedValue() == null
+                        ? null : installationsList.getSelectedValue().gameDir;
+                String selectedBuild = buildsList.getSelectedValue() == null
+                        ? null : buildsList.getSelectedValue().id;
+                installationsModel.clear();
+                for (Installation installation : installations) installationsModel.addElement(installation);
+                buildsModel.clear();
+                for (ModBuildManager.ModBuild build : builds) buildsModel.addElement(build);
+                lastInstallations = List.copyOf(installations);
+                lastBuilds = List.copyOf(builds);
+                String summary = installations.isEmpty() ? Strings.get("instances.empty")
+                        : Strings.get("instances.summary", installations.size());
+                boolean low = freeBytes >= 0 && freeBytes < by.agro.launcher.core.DiskSpace.LOW_SPACE_BYTES;
+                if (freeBytes >= 0) {
+                    summary += " · " + Strings.get(low ? "disk.freeLow" : "disk.free",
+                            by.agro.launcher.core.DiskSpace.format(freeBytes));
                 }
-            }
-            updateActionButtons();
+                summaryLabel.setText(summary);
+                summaryLabel.setForeground(low ? AgroTheme.warning() : AgroTheme.textSecondary());
+                if (statsPanel != null && tabs.getSelectedComponent() == statsPanel) statsPanel.refresh();
+                for (int i = 0; i < installationsModel.size(); i++) {
+                    Installation candidate = installationsModel.get(i);
+                    if ((selectedPath != null && candidate.gameDir.equals(selectedPath))
+                            || (selectedPath == null && i == 0)) {
+                        installationsList.setSelectedIndex(i);
+                        break;
+                    }
+                }
+                if (selectedBuild != null) {
+                    for (int i = 0; i < buildsModel.size(); i++) {
+                        if (selectedBuild.equals(buildsModel.get(i).id)) {
+                            buildsList.setSelectedIndex(i);
+                            break;
+                        }
+                    }
+                }
+                updateActionButtons();
+            });
         });
     }
 
@@ -201,17 +260,166 @@ public final class InstancesPanel extends JPanel {
         worldsButton.setEnabled(installationSelected);
         screenshotsButton.setEnabled(installationSelected);
         deleteInstallationButton.setEnabled(installationSelected);
+        Installation installation = installationsList.getSelectedValue();
+        boolean horizon = installation != null && LoaderType.fromId(installation.loaderId) == LoaderType.HORIZON;
+        cloneInstallationButton.setEnabled(installationSelected && !horizon);
+        cloneInstallationButton.setToolTipText(horizon ? Strings.get("clone.horizonUnsupported") : null);
+        compatInstallationButton.setEnabled(installationSelected);
 
         boolean buildSelected = buildsList.getSelectedValue() != null;
         playBuildButton.setEnabled(buildSelected);
         openBuildButton.setEnabled(buildSelected);
+        worldsBuildButton.setEnabled(buildSelected);
+        cloneBuildButton.setEnabled(buildSelected);
+        compatBuildButton.setEnabled(buildSelected);
     }
 
-    private List<Installation> installationCache;
-    private long installationCacheAtMillis;
+    private static JPanel actionRows(JButton[] first, JButton[] second) {
+        JPanel rows = UiFactory.transparentPanel();
+        rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
+        for (JButton[] row : new JButton[][]{first, second}) {
+            JPanel line = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+            line.setOpaque(false);
+            line.setAlignmentX(Component.LEFT_ALIGNMENT);
+            for (JButton button : row) line.add(button);
+            rows.add(line);
+            if (row == first) rows.add(UiFactory.verticalGap(6));
+        }
+        return rows;
+    }
+
+
+    record Target(String title, Path gameDir, String minecraftVersion, String loaderId, String loaderVersion) { }
+
+    private volatile List<Installation> lastInstallations = List.of();
+    private volatile List<ModBuildManager.ModBuild> lastBuilds = List.of();
+
+    private Target selectedInstallationTarget() {
+        Installation selected = installationsList.getSelectedValue();
+        if (selected == null) return null;
+        return new Target(selected.title(), selected.gameDir, selected.minecraftVersion, selected.loaderId,
+                selected.loaderVersion);
+    }
+
+    private Target selectedBuildTarget() {
+        ModBuildManager.ModBuild selected = buildsList.getSelectedValue();
+        if (selected == null || context == null) return null;
+        try {
+            return new Target(selected.name, new ModBuildManager(context.paths()).gameDir(selected),
+                    selected.minecraftVersion, selected.loader, selected.loaderVersion);
+        } catch (IllegalArgumentException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
+            return null;
+        }
+    }
+
+    private void openWorlds(Target target) {
+        if (target == null) return;
+        new WorldsDialog(SwingUtilities.getWindowAncestor(this), target.title(),
+                target.gameDir().resolve("saves")).setVisible(true);
+    }
+
+    private void cloneTarget(Target target) {
+        if (target == null || context == null) return;
+        InstanceCloner.Source source = new InstanceCloner.Source(target.gameDir(), target.minecraftVersion(),
+                target.loaderId(), target.loaderVersion());
+        if (!InstanceCloner.supported(source)) {
+            JOptionPane.showMessageDialog(this, Strings.get("clone.horizonUnsupported"),
+                    Strings.get("common.warning"), JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        Path buildsRoot = new ModBuildManager(context.paths()).buildsDir();
+        CloneInstanceDialog.Choice choice = new CloneInstanceDialog(SwingUtilities.getWindowAncestor(this),
+                target.title(), target.gameDir(), buildsRoot).ask();
+        if (choice == null) return;
+        report(Strings.get("clone.running", target.title()));
+        setCloneButtonsEnabled(false);
+        new javax.swing.SwingWorker<ModBuildManager.ModBuild, Void>() {
+            @Override
+            protected ModBuildManager.ModBuild doInBackground() throws Exception {
+                return new InstanceCloner(context.paths()).cloneToBuild(source, choice.name(), choice.parts());
+            }
+
+            @Override
+            protected void done() {
+                setCloneButtonsEnabled(true);
+                updateActionButtons();
+                try {
+                    ModBuildManager.ModBuild build = get();
+                    report(Strings.get("clone.done", build.name));
+                    tabs.setSelectedIndex(1);
+                    refresh();
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    JOptionPane.showMessageDialog(InstancesPanel.this,
+                            Strings.get("clone.failed", cause.getMessage() == null ? cause.toString() : cause.getMessage()),
+                            Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
+    private void setCloneButtonsEnabled(boolean enabled) {
+        cloneInstallationButton.setEnabled(enabled);
+        cloneBuildButton.setEnabled(enabled);
+    }
+
+    private void checkCompatibility(Target target) {
+        if (target == null) return;
+        compatInstallationButton.setEnabled(false);
+        compatBuildButton.setEnabled(false);
+        report(Strings.get("compat.running", target.title()));
+        new javax.swing.SwingWorker<ModCompatibilityChecker.Report, Void>() {
+            @Override
+            protected ModCompatibilityChecker.Report doInBackground() {
+                return ModCompatibilityChecker.check(target.gameDir(), target.minecraftVersion(),
+                        LoaderType.fromId(target.loaderId()), target.loaderVersion());
+            }
+
+            @Override
+            protected void done() {
+                updateActionButtons();
+                try {
+                    ModCompatibilityChecker.Report result = get();
+                    report(result.summary());
+                    CompatibilityDialog.show(InstancesPanel.this, target.title(), result);
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    JOptionPane.showMessageDialog(InstancesPanel.this, String.valueOf(cause.getMessage()),
+                            Strings.get("common.error"), JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+
+
+    private String statsLabel(String key) {
+        if (context == null) return key;
+        Path path = new by.agro.launcher.stats.PlayStatsStore(context.paths().root()).pathFor(key);
+        for (Installation installation : lastInstallations) {
+            if (installation.gameDir.toAbsolutePath().normalize().equals(path)) return installation.title();
+        }
+        ModBuildManager builds = new ModBuildManager(context.paths());
+        for (ModBuildManager.ModBuild build : lastBuilds) {
+            try {
+                if (builds.gameDir(build).toAbsolutePath().normalize().equals(path)) {
+                    return Strings.get("stats.buildLabel", build.name);
+                }
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        if (path.toAbsolutePath().normalize().equals(context.paths().gameDir().toAbsolutePath().normalize())) {
+            return Strings.get("stats.sharedDir");
+        }
+        return Strings.get("stats.removed", key);
+    }
+
+    private volatile List<Installation> installationCache;
+    private volatile long installationCacheAtMillis;
     private static final long INSTALLATION_CACHE_TTL_MS = 5_000;
 
     private List<Installation> scanInstallations() {
+        long cacheVersion = cacheGeneration.get();
         List<Installation> cached = installationCache;
         if (cached != null
                 && System.currentTimeMillis() - installationCacheAtMillis < INSTALLATION_CACHE_TTL_MS) {
@@ -243,8 +451,12 @@ public final class InstancesPanel extends JPanel {
         }
         result.sort(Comparator.comparing((Installation i) -> i.minecraftVersion).reversed()
                 .thenComparing(i -> i.gameDir.toString()));
-        installationCache = new ArrayList<>(result);
-        installationCacheAtMillis = System.currentTimeMillis();
+        synchronized (cacheGuard) {
+            if (cacheVersion == cacheGeneration.get()) {
+                installationCacheAtMillis = System.currentTimeMillis();
+                installationCache = new ArrayList<>(result);
+            }
+        }
         return result;
     }
 
@@ -321,7 +533,10 @@ public final class InstancesPanel extends JPanel {
                         "Instance directory");
             }
             deleteTree(selected.gameDir);
-            installationCache = null;
+            synchronized (cacheGuard) {
+                cacheGeneration.incrementAndGet();
+                installationCache = null;
+            }
             report(Strings.get("instances.deleted", selected.title()));
             refresh();
         } catch (IOException e) {
@@ -438,7 +653,11 @@ public final class InstancesPanel extends JPanel {
         if (selected == null) {
             return;
         }
-        Path folder = selected.gameDir.resolve(screenshots ? "screenshots" : "saves");
+        if (!screenshots) {
+            openWorlds(selectedInstallationTarget());
+            return;
+        }
+        Path folder = selected.gameDir.resolve("screenshots");
         new InstanceContentDialog(javax.swing.SwingUtilities.getWindowAncestor(this),
                 folder, screenshots).setVisible(true);
     }

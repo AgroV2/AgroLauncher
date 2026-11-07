@@ -6,7 +6,8 @@ public final class Account {
     public enum Type {
         OFFLINE("accounts.offline"),
         ELY_BY(null),
-        ELY_BY_OAUTH(null);
+        ELY_BY_OAUTH(null),
+        MICROSOFT("accounts.microsoft");
 
         private final String nameKey;
 
@@ -14,35 +15,35 @@ public final class Account {
             this.nameKey = nameKey;
         }
 
-        
+
         public String displayName() {
             return nameKey == null ? "Ely.by" : by.agro.launcher.i18n.Strings.get(nameKey);
         }
     }
 
-    
+
     public String id;
 
     public Type type = Type.OFFLINE;
 
-    
+
     public String username = "";
 
-    
+
     public String uuid = "";
 
-    
+
     public String accessToken = "";
 
-    
+
     public String clientToken = "";
 
-    
+
     public String login = "";
 
     public String skinUrl = "";
 
-    
+
     public long tokenUpdatedAt;
 
     public long tokenExpiresAt;
@@ -65,12 +66,12 @@ public final class Account {
         return type == Type.OFFLINE;
     }
 
-    
+
     public String userType() {
-        return isOffline() ? "legacy" : "mojang";
+        return isOffline() ? "legacy" : type == Type.MICROSOFT ? "msa" : "mojang";
     }
 
-    
+
     public String uuidDashed() {
         if (uuid == null || uuid.length() != 32) {
             return uuid;

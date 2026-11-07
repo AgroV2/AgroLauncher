@@ -56,7 +56,8 @@ public final class LauncherContext {
             }
         }
         this.paths.ensureDirectories();
-        this.downloader = new Downloader(this.settings.downloadParallelism);
+        this.downloader = new Downloader(this.settings.downloadParallelism, this.settings.downloadPerHost,
+                new by.agro.launcher.core.DownloadManager());
         Downloader.configureProxy(this.settings.proxyMode, this.settings.proxyHost, this.settings.proxyPort);
         SafeNetwork.configureAllowedDownloadHosts(this.settings.downloadHostAllowList);
         Downloader.setVerificationCacheFile(paths.cacheDir().resolve("download-verification.json"));

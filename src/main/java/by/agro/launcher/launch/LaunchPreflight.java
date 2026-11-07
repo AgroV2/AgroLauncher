@@ -22,6 +22,6 @@ public final class LaunchPreflight {
     }
 
     public void requireValid() throws IOException {
-        if (!blockingErrors.isEmpty()) throw new IOException("Launch preflight failed: " + String.join("; ", blockingErrors));
+        if (!blockingErrors.isEmpty()) throw new IOException(by.agro.launcher.i18n.Strings.get("launch.preflightFailed", String.join("; ", blockingErrors)));
     }
 }

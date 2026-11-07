@@ -11,7 +11,7 @@ public final class PaletteFactory {
         float[] baseHsb = Color.RGBtoHSB(base.getRed(), base.getGreen(), base.getBlue(), null);
         float[] accentHsb = Color.RGBtoHSB(accent.getRed(), accent.getGreen(), accent.getBlue(), null);
 
-       
+
         float bgHue = mixHue(baseHsb[0], accentHsb[0], 0.15f);
         float bgSat = Math.min(0.22f, baseHsb[1] + 0.04f);
         float baseBrightness = Math.max(0.045f, baseHsb[2]);

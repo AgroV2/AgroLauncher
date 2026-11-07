@@ -3,42 +3,42 @@ package by.agro.launcher.ui.theme;
 import java.awt.Color;
 public final class ThemePalette {
 
-    
-    
+
+
     public final Color bgDeep;
-    
+
     public final Color bgBase;
-    
+
     public final Color bgPanel;
-    
+
     public final Color bgElevated;
-    
+
     public final Color bgHover;
 
-    
-    
+
+
     public final Color accent;
-    
+
     public final Color accentLight;
-    
+
     public final Color accentDark;
-    
+
     public final Color accentDeep;
-    
+
     public final Color accentGlow;
-    
+
     public final Color textOnAccent;
 
-    
+
     public final Color textPrimary;
     public final Color textSecondary;
     public final Color textMuted;
 
-    
+
     public final Color border;
     public final Color borderLight;
 
-    
+
     public final Color error;
     public final Color warning;
     public final Color info;
@@ -70,7 +70,7 @@ public final class ThemePalette {
         this.info = info;
     }
 
-    
+
     public Color success() {
         return accent;
     }

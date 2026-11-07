@@ -22,6 +22,7 @@ public final class Settings {
     public boolean showConsole = true;
     public boolean keepLauncherOpen = true;
     public int downloadParallelism = defaultDownloadParallelism();
+    public int downloadPerHost = 4;
     public boolean metadataCacheEnabled = true;
     public int metadataCacheTtlMinutes = 360;
     public int metadataSearchCacheTtlMinutes = 10;
@@ -36,36 +37,36 @@ public final class Settings {
     public String gameDataPath = "";
     public String downloadHostAllowList = "";
 
-    
+
     public String selectedVersion = "";
 
-    
+
     public String selectedLoader = "vanilla";
 
-    
+
     public String selectedLoaderVersion = "";
 
-    
+
     public String selectedModBuildId = "";
 
-    
+
     public boolean showSnapshots = false;
 
-    
+
     public boolean showOldVersions = false;
 
-    
+
     public String activeAccountId = "";
 
-    
+
     public boolean optimizedJvmFlags = true;
 
-    
 
-    
+
+
     public String language = "";
 
-    
+
     public String themePreset = "EMERALD_DARK";
 
 
@@ -73,40 +74,43 @@ public final class Settings {
 
     public String interfaceStyle = "";
 
-    
+
     public String customAccentColor = "#10B981";
 
     public String gradientPreset = "NONE";
 
     public String customGradientColors = "#10B981,#38BDF8";
 
-    
+
     public String backgroundImagePath = "";
 
-    
+
     public boolean backgroundBlur = false;
 
-    
+
     public int backgroundBlurRadius = 12;
 
-    
+
     public int backgroundDimPercent = 45;
 
-    
+
     public int panelOpacityPercent = 88;
 
-    
+
     public int windowOpacityPercent = 100;
 
-    
 
-    
+
+
     public String modSearchSort = "downloads";
 
-    
+
     public boolean installModDependencies = true;
 
-    
+
+    public boolean checkModsBeforeLaunch = true;
+
+
     public String elyOAuthAuthorizationEndpoint = "";
     public String elyOAuthTokenEndpoint = "";
     public String elyOAuthProfileEndpoint = "";
@@ -116,10 +120,10 @@ public final class Settings {
     public int elyOAuthTimeoutSeconds = 180;
     public String elySkinUrlTemplate = "https://skinsystem.ely.by/skins/{username}.png";
 
-    
+
     public String githubRepository = "AgroV2/AgroLauncher";
 
-    
+
     private static int defaultDownloadParallelism() {
         return clamp(Runtime.getRuntime().availableProcessors() * 2, 4, 16);
     }
@@ -160,7 +164,7 @@ public final class Settings {
         }
     }
 
-    
+
     private void normalize() {
         if (maxRamMb < 512) maxRamMb = 512;
         long limit = Math.max(2048, SystemInfo.totalRamMb());
@@ -170,6 +174,7 @@ public final class Settings {
         if (windowWidth < 320) windowWidth = 854;
         if (windowHeight < 240) windowHeight = 480;
         downloadParallelism = clamp(downloadParallelism, 1, 32);
+        downloadPerHost = clamp(downloadPerHost, 1, 32);
         metadataCacheTtlMinutes = clamp(metadataCacheTtlMinutes, 1, 10080);
         metadataSearchCacheTtlMinutes = clamp(metadataSearchCacheTtlMinutes, 1, 1440);
         if (selectedLoader == null || selectedLoader.isBlank()) selectedLoader = "vanilla";
@@ -186,7 +191,7 @@ public final class Settings {
         }
         useManagedJava = "MANAGED".equals(javaMode);
 
-        
+
         if (themePreset == null || themePreset.isBlank()) themePreset = "EMERALD_DARK";
         if (interfaceStyle == null || interfaceStyle.isBlank()) {
             interfaceStyle = materialYouStyle ? "MATERIAL_YOU" : "STANDARD";

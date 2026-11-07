@@ -122,6 +122,59 @@ public final class ModBuildManager {
         }
     }
 
+
+    public ModBuild newHorizonBuild(int modCount) throws IOException {
+        if (modCount < 1) throw new IOException(Strings.get("hnmod.noEnabled"));
+        ModBuild build = new ModBuild();
+        build.id = UUID.randomUUID().toString();
+        String label = Strings.get("hnmod.instanceName", modCount, java.time.LocalDate.now().toString());
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        for (ModBuild other : list()) existing.add(other.name);
+        build.name = label;
+        for (int suffix = 2; existing.contains(build.name); suffix++) build.name = label + " (" + suffix + ")";
+        build.minecraftVersion = "26.3";
+        build.loader = LoaderType.HORIZON.id();
+        build.loaderVersion = "";
+        build.createdAt = Instant.now().toString();
+        build.files = modCount;
+        return build;
+    }
+
+
+
+
+
+    public ModBuild newBuild(String name, String minecraftVersion, String loaderId, String loaderVersion)
+            throws IOException {
+        if (minecraftVersion == null || minecraftVersion.isBlank()) {
+            throw new IOException(Strings.get("builds.selectVersion"));
+        }
+        LoaderType loader = LoaderType.fromId(loaderId);
+        if (loader == LoaderType.HORIZON) {
+            throw new IOException(Strings.get("clone.horizonUnsupported"));
+        }
+        ModBuild build = new ModBuild();
+        build.id = UUID.randomUUID().toString();
+        build.name = name == null || name.isBlank()
+                ? Strings.get("builds.defaultName", minecraftVersion) : name.trim();
+        build.minecraftVersion = minecraftVersion;
+        build.loader = loader.id();
+        build.loaderVersion = loaderVersion == null ? "" : loaderVersion;
+        build.createdAt = Instant.now().toString();
+        return build;
+    }
+
+
+    public Path buildDirectory(ModBuild build) {
+        return buildDir(build);
+    }
+
+
+    public void writeMetadata(ModBuild build) throws IOException {
+        Files.createDirectories(buildDir(build));
+        Json.write(buildDir(build).resolve(METADATA), build);
+    }
+
     public List<ModBuild> list() {
         List<ModBuild> result = new ArrayList<>();
         if (!Files.isDirectory(buildsDir())) {

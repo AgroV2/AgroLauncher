@@ -66,9 +66,9 @@ class VersionsPanelTest {
                     assertFalse(loaders.isEnabled());
                     panel.refreshSelection();
                     assertEquals("26.3 Rust", list.getSelectedValue().id);
-                    display.invoke(panel, source); 
+                    display.invoke(panel, source);
                     assertEquals("26.3 Rust", list.getSelectedValue().id);
-                    list.setSelectedIndex(0); 
+                    list.setSelectedIndex(0);
                     assertEquals("26.4", settings.selectedVersion);
                     assertEquals("vanilla", settings.selectedLoader);
                     assertTrue(loaders.isEnabled());

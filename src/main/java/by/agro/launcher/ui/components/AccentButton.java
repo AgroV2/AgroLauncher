@@ -61,7 +61,11 @@ public final class AccentButton extends JButton {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        int arc = AgroTheme.materialYouStyle() ? Math.max(24, getHeight()) : 11;
+        int arc = switch (AgroTheme.interfaceStyle()) {
+            case MATERIAL_YOU -> Math.max(24, getHeight());
+            case STANDARD, LIQUID_GLASS -> 11;
+            default -> Math.min(AgroTheme.interfaceStyle().buttonArc(), getHeight());
+        };
         Color background;
         if (!isEnabled()) {
             background = AgroTheme.bgHover();
@@ -84,6 +88,10 @@ public final class AccentButton extends JButton {
             g2.setColor(background);
         }
         g2.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, arc, arc);
+        if (isEnabled()) {
+            StyleVisuals.paintButtonFinish(g2, AgroTheme.interfaceStyle(), 1, 1,
+                    getWidth() - 2, getHeight() - 2, arc, pressed);
+        }
 
         setForeground(isEnabled() ? AgroTheme.textOnAccent() : AgroTheme.textMuted());
 

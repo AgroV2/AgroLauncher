@@ -160,8 +160,6 @@ public final class AppearancePanel extends JPanel {
     private JComponent buildInterfaceStyleCard() {
         JPanel card = UiFactory.titledCard(Strings.get("appearance.interfaceStyle"));
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 178));
-
         JPanel body = UiFactory.transparentPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
@@ -179,6 +177,7 @@ public final class AppearancePanel extends JPanel {
         body.add(grid);
         updateStyleSelection();
         card.add(body, BorderLayout.CENTER);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height));
         return card;
     }
 
@@ -481,7 +480,7 @@ public final class AppearancePanel extends JPanel {
             valueLabel.setText(slider.getValue() + suffix);
             updateSliderValuesInMemory();
             if (slider == windowOpacitySlider) {
-                
+
                 notifyChanged();
                 if (slider.getValueIsAdjusting()) {
                     opacitySaveDebounce.restart();

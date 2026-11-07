@@ -212,6 +212,8 @@ public final class WindowGestures {
         @Override
         public void mouseReleased(MouseEvent e) {
             UiFactory.setLiveResize(false);
+
+            frame.repaint();
             startScreen = null;
             startBounds = null;
             startSize = null;

@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public final class OfflineAuth {
 
-    
+
     public static final String PLACEHOLDER_TOKEN = "0";
 
     private static final String PREFIX = "OfflinePlayer:";
@@ -17,12 +17,12 @@ public final class OfflineAuth {
     private OfflineAuth() {
     }
 
-    
+
     public static String uuidFor(String username) {
         return offlineUuid(username).toString().replace("-", "");
     }
 
-    
+
     public static UUID offlineUuid(String username) {
         byte[] source = (PREFIX + username).getBytes(StandardCharsets.UTF_8);
         return uuidVersion3(source);
@@ -52,7 +52,7 @@ public final class OfflineAuth {
         return new UUID(most, least);
     }
 
-    
+
     public static boolean isValidUsername(String username) {
         if (username == null) {
             return false;

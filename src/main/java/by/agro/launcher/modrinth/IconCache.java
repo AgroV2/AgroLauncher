@@ -104,12 +104,9 @@ public final class IconCache {
     private BufferedImage download(String url) throws IOException {
         URI current = SafeNetwork.requirePublicHttps(url);
         for (int redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
-            
-            SafeNetwork.validateResolvedAddresses(current);
-            HttpURLConnection connection = (HttpURLConnection) current.toURL().openConnection();
-            if (connection instanceof javax.net.ssl.HttpsURLConnection https) {
-                SafeNetwork.pinConnection(https, current);
-            }
+
+            HttpURLConnection connection = SafeNetwork.openConnection(current,
+                    by.agro.launcher.core.Downloader.configuredProxy());
             connection.setRequestProperty("User-Agent", by.agro.launcher.core.LauncherVersion.USER_AGENT);
             connection.setConnectTimeout(12_000);
             connection.setReadTimeout(20_000);

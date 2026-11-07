@@ -5,6 +5,7 @@ import by.agro.launcher.auth.AccountStorage;
 import by.agro.launcher.auth.AuthlibInjector;
 import by.agro.launcher.auth.ElyByAuth;
 import by.agro.launcher.auth.ElyByOAuth;
+import by.agro.launcher.auth.MicrosoftAuth;
 import by.agro.launcher.core.Downloader;
 import by.agro.launcher.core.Json;
 import by.agro.launcher.core.LauncherPaths;
@@ -64,7 +65,7 @@ public final class GameLauncher {
         this.commandBuilder = new LaunchCommandBuilder(paths);
         this.accounts = accounts;
     }
-    
+
     private Rule.FeatureSet featureSet() {
         return feature -> "has_custom_resolution".equals(feature) && !settings.fullscreen;
     }
@@ -91,7 +92,12 @@ public final class GameLauncher {
         listener.onMessage(Strings.get("progress.versionPrepare", versionId));
         OfflinePolicy policy = new OfflinePolicy(settings.offlineMode
                 ? ConnectivityState.OFFLINE : ConnectivityState.ONLINE);
+        if (accounts != null && account != null && !account.isOffline()) accounts.awaitSecrets();
         policy.requireLaunchAccount(account);
+        if (account != null && account.type == Account.Type.MICROSOFT) {
+            listener.onMessage(Strings.get("microsoft.checkingOwnership"));
+            requireMicrosoftOwnership(account);
+        }
         ResolvedVersion version = resolver.resolve(versionId, manifest, listener, policy.offline());
         listener.onMessage(Strings.get("progress.versionChain", String.join(" → ", version.chain)));
 
@@ -117,7 +123,7 @@ public final class GameLauncher {
                 javaSelection.detectedMajor, javaSelection.reason));
         listener.onMessage(Strings.get("launch.ramRecommended", memory.recommendedMinMb, memory.recommendedMaxMb));
 
-        
+
         LaunchOptions options = new LaunchOptions();
         options.version = version;
         options.account = account;
@@ -132,12 +138,14 @@ public final class GameLauncher {
         if (!account.isOffline() && !policy.offline()) {
             listener.onProgress(Strings.get("progress.auth"), 0, 1, account.username);
             ensureAccountToken(account);
-            options.authlibInjectorJar = authlibInjector.ensureInstalled(listener);
-            options.authlibServer = ElyByAuth.INJECTOR_ARGUMENT;
+            if (usesElyInjector(account)) {
+                options.authlibInjectorJar = authlibInjector.ensureInstalled(listener);
+                options.authlibServer = ElyByAuth.INJECTOR_ARGUMENT;
+            }
             listener.onProgress(Strings.get("progress.auth"), 1, 1, Strings.get("progress.tokenValid"));
         }
 
-        
+
         Files.createDirectories(options.gameDir.resolve("mods"));
         ensureInstanceResourceFolders(options.gameDir);
 
@@ -146,7 +154,11 @@ public final class GameLauncher {
         return new PreparedLaunch(command, javaSelection);
     }
 
-    
+    static boolean usesElyInjector(Account account) {
+        return account != null && (account.type == Account.Type.ELY_BY || account.type == Account.Type.ELY_BY_OAUTH);
+    }
+
+
 
     public GameProcess launch(String versionId, Account account, VersionManifest manifest,
                               ProgressListener listener, Consumer<String> onLine, IntConsumer onExit)
@@ -195,9 +207,25 @@ public final class GameLauncher {
         }
     }
 
+
+    public void requireMicrosoftOwnership(Account account) throws IOException {
+        if (account == null || account.type != Account.Type.MICROSOFT)
+            throw new IOException(Strings.get("microsoft.signInAgain"));
+        if (settings.offlineMode) throw new IOException(Strings.get("microsoft.ownershipRequiresOnline"));
+        ensureAccountToken(account);
+        MicrosoftAuth.requireOwnership(account);
+    }
+
     private void ensureAccountToken(Account account) throws IOException {
         if (accounts != null) {
             accounts.awaitSecrets();
+        }
+        if (account.type == Account.Type.MICROSOFT) {
+            if (account.accessToken != null && !account.accessToken.isBlank()
+                    && account.tokenExpiresAt > System.currentTimeMillis() + 60_000L) return;
+
+            try { MicrosoftAuth.refresh(account); } finally { persistAccount(account); }
+            return;
         }
         if (account.type == Account.Type.ELY_BY_OAUTH) {
             long expiresAt = account.tokenExpiresAt;
@@ -400,6 +428,11 @@ public final class GameLauncher {
     public synchronized void recordPlayTime(Path gameDir, long sessionMs) {
         if (gameDir == null || sessionMs <= 0) {
             return;
+        }
+        try {
+            long now = System.currentTimeMillis();
+            new by.agro.launcher.stats.PlayStatsStore(paths.root()).record(gameDir, now - sessionMs, now);
+        } catch (RuntimeException ignored) {
         }
         try {
             Path marker = gameDir.resolve(".agrolauncher-playtime.json");

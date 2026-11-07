@@ -57,7 +57,7 @@ public final class AccountHeadIcons {
 
     public static void load(Account account, Settings settings, Consumer<Icon> callback) {
         String accountKey = accountKey(account);
-        String primaryUrl = normalizeUrl(account == null ? null : account.skinUrl);
+        String primaryUrl = isElyAccount(account) ? normalizeUrl(account.skinUrl) : "";
         String fallbackUrl = fallbackUrl(account);
         String selectedUrl = primaryUrl.isBlank() ? fallbackUrl : primaryUrl;
         String cacheKey = key(account, selectedUrl);
@@ -85,12 +85,7 @@ public final class AccountHeadIcons {
         Thread worker = new Thread(() -> {
             Icon icon = null;
             try {
-                if (!primaryUrl.isBlank()) {
-                    icon = download(primaryUrl, accountKey);
-                }
-                if (icon == null && !fallbackUrl.isBlank() && !fallbackUrl.equals(primaryUrl)) {
-                    icon = download(fallbackUrl, accountKey);
-                }
+                icon = loadWithFallback(primaryUrl, fallbackUrl, url -> download(url, accountKey));
                 if (icon != null) {
                     CACHE.put(cacheKey, icon);
                     LAST_FAILURE.remove(accountKey);
@@ -128,15 +123,51 @@ public final class AccountHeadIcons {
         return DEFAULT_SKIN_URL_TEMPLATE.replace("{username}", encode(account.username));
     }
 
-    private static String normalizeUrl(String value) {
+    @FunctionalInterface
+    interface SkinDownloader {
+        Icon download(String url) throws IOException;
+    }
+
+    static Icon loadWithFallback(String primary, String fallback, SkinDownloader downloader) throws IOException {
+        IOException primaryError = null;
+        if (!primary.isBlank()) {
+            try {
+                Icon result = downloader.download(primary);
+                if (result != null) return result;
+            } catch (IOException e) {
+                primaryError = e;
+            }
+        }
+        if (!fallback.isBlank() && !fallback.equals(primary)) {
+            try {
+                return downloader.download(fallback);
+            } catch (IOException e) {
+                if (primaryError != null) e.addSuppressed(primaryError);
+                throw e;
+            }
+        }
+        if (primaryError != null) throw primaryError;
+        return null;
+    }
+
+    static String normalizeUrl(String value) {
         if (value == null) return "";
         String normalized = value.trim().replace("\\/", "/");
         if (normalized.startsWith("//")) normalized = "https:" + normalized;
         if (!normalized.isBlank() && !normalized.contains("://")) normalized = "https://" + normalized;
         try {
             URI uri = URI.create(normalized).normalize();
-            String scheme = uri.getScheme();
-            return ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) ? uri.toString() : "";
+            if (uri.getHost() == null || uri.getUserInfo() != null || uri.getPort() == 0
+                    || uri.getPort() > 65535 || uri.getPort() < -1) return "";
+            if ("https".equalsIgnoreCase(uri.getScheme())) return uri.toString();
+
+            if ("http".equalsIgnoreCase(uri.getScheme()) && uri.getPort() == -1
+                    && ("ely.by".equalsIgnoreCase(uri.getHost())
+                    || "skinsystem.ely.by".equalsIgnoreCase(uri.getHost())
+                    || "textures.minecraft.net".equalsIgnoreCase(uri.getHost()))) {
+                return "https" + uri.toString().substring(uri.getScheme().length());
+            }
+            return "";
         } catch (IllegalArgumentException error) {
             return "";
         }
@@ -163,7 +194,9 @@ public final class AccountHeadIcons {
         HttpURLConnection connection = null;
         int status = -1;
         for (int redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
-            connection = (HttpURLConnection) URI.create(currentUrl).toURL().openConnection();
+            connection = by.agro.launcher.core.SafeNetwork.openConnection(
+                    by.agro.launcher.core.SafeNetwork.requirePublicHttps(currentUrl),
+                    by.agro.launcher.core.Downloader.configuredProxy());
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);
             connection.setInstanceFollowRedirects(false);

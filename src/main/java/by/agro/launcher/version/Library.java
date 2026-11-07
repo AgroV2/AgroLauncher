@@ -21,13 +21,13 @@ public final class Library {
 
     public final Artifact artifact;
 
- 
+
     public final Map<String, Artifact> classifiers;
 
 
     public final Map<String, String> natives;
 
- 
+
     public final String mavenUrl;
 
     public final List<String> extractExclude;
@@ -138,7 +138,7 @@ public final class Library {
         return hasLegacyNatives() || isModernNative();
     }
 
- 
+
     public String currentNativeClassifier() {
         if (natives.isEmpty()) {
             return null;
@@ -151,7 +151,7 @@ public final class Library {
         return template.replace("${arch}", arch);
     }
 
-  
+
     public Artifact resolveArtifact() {
         String nativeClassifier = currentNativeClassifier();
         if (nativeClassifier != null) {
@@ -159,7 +159,7 @@ public final class Library {
             if (fromClassifier != null) {
                 return fromClassifier;
             }
-            
+
             return syntheticArtifact(nativeClassifier);
         }
         if (artifact != null) {
@@ -168,7 +168,7 @@ public final class Library {
         return syntheticArtifact(null);
     }
 
- 
+
     private Artifact syntheticArtifact(String extraClassifier) {
         String coords = name;
         if (extraClassifier != null && !extraClassifier.isEmpty()) {

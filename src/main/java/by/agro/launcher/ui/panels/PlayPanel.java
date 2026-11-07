@@ -270,8 +270,11 @@ public final class PlayPanel extends JPanel {
     public void refresh() {
         SwingUtilities.invokeLater(() -> {
             String version = context.settings().selectedVersion;
+            var chosenBuild = new ModBuildManager(context.paths()).list().stream()
+                    .filter(b -> b.id.equals(context.settings().selectedModBuildId)
+                            && b.loaderType() == LoaderType.HORIZON).findFirst().orElse(null);
             versionLabel.setText("horizon".equals(context.settings().selectedLoader)
-                    ? by.agro.launcher.horizon.HorizonManager.INSTANCE_NAME
+                    ? (chosenBuild == null ? by.agro.launcher.horizon.HorizonManager.INSTANCE_NAME : chosenBuild.name)
                     : version == null || version.isBlank() ? Strings.get("play.versionNotSelected") : version);
 
             LoaderType loader = LoaderType.fromId(context.settings().selectedLoader);
@@ -438,6 +441,22 @@ public final class PlayPanel extends JPanel {
                             ? isolatedGameDir(effectiveVersion, loaderType)
                             : buildManager.gameDir(activeBuild);
                 }
+                if (!forceVanillaDirectory && context.settings().checkModsBeforeLaunch && loaderType.supportsMods()) {
+                    listener.onMessage(Strings.get("compat.preflightRunning"));
+                    by.agro.launcher.mods.ModCompatibilityChecker.Report compatibility =
+                            by.agro.launcher.mods.ModCompatibilityChecker.check(gameDir, effectiveVersion, loaderType,
+                                    context.settings().selectedLoaderVersion);
+                    for (by.agro.launcher.mods.ModCompatibilityChecker.Issue issue : compatibility.issues()) {
+                        listener.onMessage(issue.toString());
+                    }
+                    listener.onMessage(compatibility.summary());
+                    if (compatibility.hasErrors()) {
+                        boolean[] proceed = {false};
+                        SwingUtilities.invokeAndWait(() -> proceed[0] =
+                                CompatibilityDialog.confirmLaunch(PlayPanel.this, compatibility));
+                        if (!proceed[0]) throw new LaunchCancelledException();
+                    }
+                }
                 return context.gameLauncher().launch(
                         versionToLaunch,
                         account,
@@ -465,9 +484,16 @@ public final class PlayPanel extends JPanel {
                     }
                 } catch (Exception e) {
                     Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    if (cause instanceof LaunchCancelledException) {
+                        progressLabel.setText(Strings.get("compat.launchCancelled"));
+                        console.appendLauncherMessage(Strings.get("compat.launchCancelled"));
+                        report(Strings.get("compat.launchCancelled"));
+                        playButton.setEnabled(true);
+                        return;
+                    }
                     String message = cause.getMessage() != null ? cause.getMessage() : cause.toString();
                     progressLabel.setText(Strings.get("play.launchError"));
-                    console.appendLauncherMessage("ОШИБКА: " + message);
+                    console.appendLauncherMessage(Strings.get("play.errorPrefix", message));
                     report(Strings.get("play.launchErrorDetails", message));
                     playButton.setEnabled(true);
                 }
@@ -617,7 +643,7 @@ public final class PlayPanel extends JPanel {
             lastReport = completed.diagnosticReport();
             exportButton.setEnabled(lastReport != null);
             if (lastReport != null && !lastReport.findings.isEmpty()) {
-                console.appendLauncherMessage("Диагностика:");
+                console.appendLauncherMessage(Strings.get("play.diagnosticsHeader"));
                 for (DiagnosticFinding finding : lastReport.findings) {
                     console.appendLauncherMessage(finding.toString());
                 }
@@ -701,5 +727,11 @@ public final class PlayPanel extends JPanel {
 
     public GameConsole console() {
         return console;
+    }
+
+    private static final class LaunchCancelledException extends java.io.IOException {
+        LaunchCancelledException() {
+            super(Strings.get("compat.launchCancelled"));
+        }
     }
 }

@@ -57,7 +57,7 @@ public final class LaunchCommandBuilder {
         }
     }
 
-    
+
     public List<String> build(LaunchOptions options) {
         ResolvedVersion version = options.version;
         boolean customResolution = !options.settings.fullscreen;
@@ -67,29 +67,29 @@ public final class LaunchCommandBuilder {
         Map<String, String> placeholders = buildPlaceholders(options, features);
         List<String> command = new ArrayList<>();
 
-        
+
         command.add(options.javaExecutable);
 
-        
+
         command.add("-Xmx" + options.settings.maxRamMb + "M");
         if (options.settings.minRamMb > 0) {
             command.add("-Xms" + options.settings.minRamMb + "M");
         }
 
-        
+
         if (options.useAuthlibInjector()) {
             command.add(AuthlibInjector.javaAgentArgument(options.authlibInjectorJar, options.authlibServer));
         }
 
-        
+
         if (options.settings.optimizedJvmFlags) {
             command.addAll(optimizedFlags());
         }
 
-        
+
         command.addAll(platformFlags(options));
 
-        
+
         if (version.jvmArguments != null && !version.jvmArguments.isEmpty()) {
             boolean modulePathValue = false;
             for (Argument argument : version.jvmArguments) {
@@ -109,22 +109,22 @@ public final class LaunchCommandBuilder {
                 }
             }
         } else {
-            
+
             command.add("-Djava.library.path=" + options.nativesDir.toAbsolutePath());
             command.add("-cp");
             command.add(placeholders.get("classpath"));
         }
 
-        
+
         command.addAll(splitArguments(options.settings.extraJvmArgs));
 
-        
+
         command.add(version.mainClass);
 
-        
+
         command.addAll(buildGameArguments(options, features, placeholders));
 
-        
+
         if (options.settings.fullscreen) {
             command.add("--fullscreen");
         } else if (!containsArgument(command, "--width")) {
@@ -228,7 +228,7 @@ public final class LaunchCommandBuilder {
             return result;
         }
 
-        
+
         if (version.minecraftArguments != null) {
             for (String token : version.minecraftArguments.trim().split("\\s+")) {
                 if (!token.isEmpty()) {
@@ -239,7 +239,7 @@ public final class LaunchCommandBuilder {
         return result;
     }
 
-    
+
     private Map<String, String> buildPlaceholders(LaunchOptions options, Rule.FeatureSet features) {
         ResolvedVersion version = options.version;
         Map<String, String> map = new HashMap<>();
@@ -247,7 +247,7 @@ public final class LaunchCommandBuilder {
         String classpath = buildClasspath(version, features, options.loaderType);
         String librariesPath = paths.librariesDir().toAbsolutePath().toString();
 
-        
+
         map.put("auth_player_name", options.account.username);
         map.put("auth_uuid", options.account.uuid);
         map.put("auth_access_token", options.account.accessToken);
@@ -255,14 +255,14 @@ public final class LaunchCommandBuilder {
         map.put("user_type", options.account.userType());
         map.put("user_properties", "{}");
 
-        
+
         map.put("version_name", version.id);
         map.put("version_type", version.type != null ? version.type : "release");
         map.put("profile_name", options.launcherName);
         map.put("launcher_name", options.launcherName);
         map.put("launcher_version", options.launcherVersion);
 
-        
+
         map.put("game_directory", options.gameDir.toAbsolutePath().toString());
         map.put("assets_root", paths.assetsDir().toAbsolutePath().toString());
         map.put("game_assets", options.assetsDir.toAbsolutePath().toString());
@@ -272,16 +272,16 @@ public final class LaunchCommandBuilder {
         map.put("natives_directory", options.nativesDir.toAbsolutePath().toString());
         map.put("classpath", classpath);
 
-        
+
         map.put("library_directory", librariesPath);
         map.put("libraries_directory", librariesPath);
         map.put("classpath_separator", Platform.classpathSeparator());
 
-        
+
         map.put("resolution_width", String.valueOf(options.settings.windowWidth));
         map.put("resolution_height", String.valueOf(options.settings.windowHeight));
 
-        
+
         map.put("clientid", "");
         map.put("auth_xuid", "");
         map.put("quickPlayPath", "");
@@ -293,7 +293,7 @@ public final class LaunchCommandBuilder {
         return map;
     }
 
-    
+
     private String buildClasspath(ResolvedVersion version, Rule.FeatureSet features, String optionsLoaderType) {
         Set<String> entries = new LinkedHashSet<>();
         List<Library> classpathLibraries = version.classpathLibraries(features);
@@ -368,7 +368,7 @@ public final class LaunchCommandBuilder {
                 && file.equals(candidate.getParent().getFileName() + ".jar");
     }
 
-    
+
     private List<String> optimizedFlags() {
         List<String> flags = new ArrayList<>();
         flags.add("-XX:+UnlockExperimentalVMOptions");
@@ -384,12 +384,12 @@ public final class LaunchCommandBuilder {
         return flags;
     }
 
-    
+
     private List<String> platformFlags(LaunchOptions options) {
         List<String> flags = new ArrayList<>();
         switch (Platform.current()) {
             case WINDOWS:
-                
+
                 flags.add("-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump");
                 break;
             case OSX:
@@ -397,7 +397,7 @@ public final class LaunchCommandBuilder {
                 flags.add("-Dapple.awt.application.name=" + options.launcherName);
                 break;
             case LINUX:
-                
+
                 flags.add("-Dorg.lwjgl.util.NoChecks=true");
                 break;
             default:
@@ -406,7 +406,7 @@ public final class LaunchCommandBuilder {
         return flags;
     }
 
-    
+
     private String substitute(String value, Map<String, String> placeholders) {
         if (value == null || value.indexOf('$') < 0) {
             return value;
@@ -421,7 +421,7 @@ public final class LaunchCommandBuilder {
         return result;
     }
 
-    
+
     static List<String> splitArguments(String raw) {
         List<String> result = new ArrayList<>();
         if (raw == null || raw.isBlank()) {

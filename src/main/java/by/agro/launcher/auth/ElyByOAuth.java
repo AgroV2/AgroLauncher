@@ -9,18 +9,12 @@ import com.sun.net.httpserver.HttpServer;
 import java.awt.Desktop;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.Proxy;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
-import java.net.ProxySelector;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.time.Duration;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -217,33 +211,41 @@ public final class ElyByOAuth {
     }
 
     private static JsonObject postForm(String url, String body) throws IOException {
-        URI endpoint = SafeNetwork.requirePublicHttps(url);
-        return send(HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(20))
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("Accept", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build());
+        return send(url, body, null);
     }
     private static JsonObject getJson(String url, String token) throws IOException {
-        URI endpoint = SafeNetwork.requirePublicHttps(url);
-        return send(HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(20))
-                .header("Authorization", "Bearer " + token).header("Accept", "application/json").GET().build());
+        return send(url, null, token);
     }
-    private static JsonObject send(HttpRequest request) throws IOException {
+    private static JsonObject send(String url, String body, String token) throws IOException {
+        var connection = SafeNetwork.openConnection(SafeNetwork.requirePublicHttps(url),
+                by.agro.launcher.core.Downloader.configuredProxy());
+        connection.setConnectTimeout(20_000);
+        connection.setReadTimeout(20_000);
+        connection.setRequestProperty("Accept", "application/json");
         try {
-            Proxy proxy = by.agro.launcher.core.Downloader.configuredProxy();
-            HttpClient.Builder builder = HttpClient.newBuilder();
-            if (proxy != Proxy.NO_PROXY && proxy.address() instanceof InetSocketAddress address) {
-                builder.proxy(ProxySelector.of(address));
+            if (token != null) connection.setRequestProperty("Authorization", "Bearer " + token);
+            if (body != null) {
+                byte[] payload = body.getBytes(StandardCharsets.UTF_8);
+                connection.setRequestMethod("POST");
+                connection.setDoOutput(true);
+                connection.setFixedLengthStreamingMode(payload.length);
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                try (var output = connection.getOutputStream()) { output.write(payload); }
             }
-            HttpResponse<String> response = builder.build().send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() < 200 || response.statusCode() >= 300)
-                throw new IOException("OAuth request failed with HTTP " + response.statusCode());
-            JsonObject json = Json.parseObject(response.body());
+            int status = connection.getResponseCode();
+
+            if (status < 200 || status >= 300)
+                throw new IOException("OAuth request failed with HTTP " + status);
+            String text;
+            try (var input = connection.getInputStream()) {
+                byte[] bytes = input.readNBytes(1024 * 1024 + 1);
+                if (bytes.length > 1024 * 1024) throw new IOException("OAuth response exceeds size limit");
+                text = new String(bytes, StandardCharsets.UTF_8);
+            }
+            JsonObject json = Json.parseObject(text);
             if (json == null) throw new IOException("OAuth server returned an empty response");
             return json;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("OAuth request interrupted", e);
-        }
+        } finally { connection.disconnect(); }
     }
     private static String optionalDescription(String value) {
         return value == null || value.isBlank() ? "" : " (" + value + ")";
