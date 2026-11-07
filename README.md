@@ -10,7 +10,7 @@ The launcher targets **Windows** and **Linux** and includes macOS-aware code pat
 - Vanilla, Fabric, Quilt, Forge, NeoForge, and OptiFine installation and launch.
 - Automatic Java requirement detection, Adoptium runtime download, AUTO/managed/system/custom Java modes, RAM and launch-argument controls, and launch preflight checks.
 - **Isolated instances**: every Minecraft + loader + loader-version combination gets its own game directory, managed on the dedicated Instances screen (play, open folder, delete) together with independent named mod builds.
-- Offline profiles, Ely.by password/2FA authentication, and Ely.by OAuth2 with PKCE S256 (tokens refresh automatically before they expire).
+- Online and offline profiles, Ely.by password/2FA authentication, and Ely.by OAuth2 with PKCE S256 (tokens refresh automatically before they expire).
 - Tokens are stored in Windows Credential Manager, macOS Keychain, or Linux Secret Service (`secret-tool`), with migration from legacy plaintext storage where possible.
 - A shared download manager beside the game console shows progress and speed, supports pause/resume/cancel, appears when downloads start, and auto-hides after activity finishes.
 - Resumable partial downloads use HTTP Range when supported, with parallel transfers, retries, limits, and hash verification; corrupted partial files are discarded on hash mismatch instead of poisoning retries.
@@ -111,7 +111,7 @@ Data from the previous launcher generation (`.emeraldlauncher`) is migrated auto
 
 ## Important limitation
 
-The launcher works **only with `online-mode=false` servers** (offline servers). Offline profiles do not pass Mojang license verification and cannot join official servers; the launcher does not circumvent Mojang/Microsoft authentication — it only generates the same local UUID a server generates in `online-mode=false`. For skins and third-party account services use **Ely.by**, a legal third-party provider.
+The launcher can work with `online-mode=false` servers (offline servers). Offline profiles do not pass Mojang license verification and cannot join official servers; the launcher does not circumvent Mojang/Microsoft authentication — it only generates the same local UUID a server generates in `online-mode=false`. For skins and third-party account services use **Ely.by**, a legal third-party provider.
 
 ## Architecture
 
@@ -124,7 +124,7 @@ by.agro.launcher
 ├── version/                Mojang manifests, library rules, version chain
 │                           inheritance, assets, natives
 ├── loaders/                Fabric, Quilt, Forge, NeoForge, OptiFine installers
-├── auth/                   offline profiles, Ely.by, OAuth (ely.by-only
+├── auth/                   offline and online profiles, Ely.by, OAuth (ely.by-only
 │                           endpoints), authlib-injector, credential stores
 ├── jvm/                    Java detection and download, archive extraction
 ├── launch/                 launch command assembly, process, preflight
@@ -284,7 +284,7 @@ mvn clean verify -Pwindows-portable
 
 ## Важное ограничение
 
-Лаунчер работает **только с серверами `online-mode=false`**. Оффлайн-профиль не проходит проверку лицензии Mojang; лаунчер не обходит платную авторизацию — он лишь генерирует локальный UUID, как это делает сам сервер. Для скинов и сторонних сервисов аккаунтов используйте **Ely.by**.
+Лаунчер работает может работать с серверами `online-mode=false`. Оффлайн-профиль не проходит проверку лицензии Mojang; лаунчер не обходит платную авторизацию — он лишь генерирует локальный UUID, как это делает сам сервер. Для скинов и сторонних сервисов аккаунтов используйте **Ely.by**.
 
 ## Архитектура
 
@@ -297,7 +297,7 @@ by.agro.launcher
 ├── version/                манифесты Mojang, правила библиотек, наследование
 │                           версий, ассеты, нативные библиотеки
 ├── loaders/                установщики Fabric, Quilt, Forge, NeoForge, OptiFine
-├── auth/                   оффлайн, Ely.by, OAuth (только ely.by),
+├── auth/                   оффлайн и онлайн, Ely.by, OAuth (только ely.by),
 │                           authlib-injector, системные хранилища
 ├── jvm/                    определение и скачивание Java, распаковка архивов
 ├── launch/                 сборка команды запуска, процесс, preflight
@@ -353,7 +353,7 @@ several minutes. Future launches reuse the prepared resources. Compatible new
 builds can reuse a copy of an earlier build's resources.
 
 This integration uses **only the account nickname**, never its session or tokens.
-It supports offline-mode servers, not authenticated online-mode servers. Java mods,
+It supports offline-mode servers and online servers. Java mods,
 Java modpacks and shaders are not supported. JVM RAM/argument settings do not apply
 to the native client. Horizon is experimental, not a drop-in compatibility guarantee.
 
@@ -373,7 +373,7 @@ Horizon: Copyright (c) 2026 Ludovic Marie and the Horizon contributors, MIT. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); the full license is also in About.
 Minecraft files remain Mojang's, not MIT-licensed. Horizon's Launch API guide asks
 launchers to check Minecraft ownership with a Microsoft account; that request is
-separate from Horizon's MIT license. This offline-only integration does not implement
+separate from Horizon's MIT license. This offline integration does not implement
 Microsoft sign-in or an ownership check. Players remain responsible for their right
 to use Minecraft.
 
