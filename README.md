@@ -89,7 +89,7 @@ The shaded JAR (~6 MB) contains runtime dependencies. Maven also includes Window
 
 ## First launch
 
-1. Open **Accounts** → enter a nickname → add a profile, or sign in via Ely.by.
+1. Open **Accounts** → enter a nickname → add a profile, sign in via Ely.by, or sign in via Microsoft.
 2. Open **Versions** → pick a Minecraft version and a mod loader.
 3. Optionally open **Mods** → the Modpacks tab to install a Modrinth modpack, or press "Import .mrpack" for a local file — modpacks appear on the **Instances** screen and are selected automatically.
 4. Set RAM and other options in **Settings** (the Network card holds the proxy).
