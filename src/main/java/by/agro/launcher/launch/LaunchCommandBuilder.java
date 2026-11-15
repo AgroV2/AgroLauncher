@@ -98,6 +98,11 @@ public final class LaunchCommandBuilder {
                 }
                 for (String value : argument.values) {
                     String substituted = substitute(value, placeholders);
+                    if ("forge".equalsIgnoreCase(options.loaderType)
+                            && "cpw.mods.bootstraplauncher.BootstrapLauncher".equals(version.mainClass)
+                            && substituted != null && substituted.startsWith("-DignoreList=")) {
+                        substituted = ignoreForgeClientJar(substituted, version);
+                    }
                     if (modulePathValue) {
                         substituted = filterModulePath(substituted, version);
                         modulePathValue = false;
@@ -331,6 +336,20 @@ public final class LaunchCommandBuilder {
                 || name.startsWith("net.minecraft:client:")
                 || (file.startsWith("client-") && file.endsWith(".jar")
                     && jar.toString().replace('\\', '/').contains("/net/minecraft/client/"));
+    }
+
+    private String ignoreForgeClientJar(String ignoreList, ResolvedVersion version) {
+        Path clientJar = paths.versionJar(version.jarVersionId);
+        if (!Files.exists(clientJar)) {
+            clientJar = paths.versionJar(version.id);
+        }
+        if (!Files.exists(clientJar) || clientJar.getFileName() == null) return ignoreList;
+        String fileName = clientJar.getFileName().toString();
+        String existing = ignoreList.substring("-DignoreList=".length());
+        for (String filter : existing.split(",")) {
+            if (!filter.isEmpty() && fileName.startsWith(filter)) return ignoreList;
+        }
+        return ignoreList + (existing.isEmpty() ? "" : ",") + fileName;
     }
 
     private String filterModulePath(String modulePath, ResolvedVersion version) {

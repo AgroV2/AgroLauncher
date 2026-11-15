@@ -2,6 +2,7 @@ package by.agro.launcher.ui.components;
 
 import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.Frame;
 import java.awt.MouseInfo;
 import java.awt.Point;
 import java.awt.event.ComponentAdapter;
@@ -31,6 +32,11 @@ public final class WindowGestures {
         handle.addMouseMotionListener(adapter);
     }
 
+    public static boolean isMaximized(JFrame frame) {
+        return (frame.getExtendedState() & Frame.MAXIMIZED_BOTH) != 0
+                || Boolean.TRUE.equals(frame.getRootPane().getClientProperty("agro.manualMaximized"));
+    }
+
     public static void installResize(JFrame frame) {
         if (frame == null) {
             return;
@@ -53,6 +59,7 @@ public final class WindowGestures {
                 layoutEdges(frame, directions, edges);
             }
         });
+        frame.addWindowStateListener(e -> layoutEdges(frame, directions, edges));
         layoutEdges(frame, directions, edges);
     }
 
@@ -72,6 +79,7 @@ public final class WindowGestures {
         int t = EDGE_THICKNESS;
         for (int i = 0; i < directions.length; i++) {
             JPanel edge = edges[i];
+            edge.setVisible(!isMaximized(frame) && frame.isResizable());
             switch (directions[i]) {
                 case NORTH: edge.setBounds(0, 0, width, t); break;
                 case SOUTH: edge.setBounds(0, height - t, width, t); break;
@@ -118,7 +126,7 @@ public final class WindowGestures {
 
         @Override
         public void mousePressed(MouseEvent e) {
-            if (e.getButton() != MouseEvent.BUTTON1) {
+            if (e.getButton() != MouseEvent.BUTTON1 || isMaximized(frame)) {
                 return;
             }
             grabScreenLocation = MouseInfo.getPointerInfo().getLocation();
@@ -156,7 +164,7 @@ public final class WindowGestures {
 
         @Override
         public void mousePressed(MouseEvent e) {
-            if (e.getButton() != MouseEvent.BUTTON1) {
+            if (e.getButton() != MouseEvent.BUTTON1 || isMaximized(frame)) {
                 return;
             }
             UiFactory.setLiveResize(true);

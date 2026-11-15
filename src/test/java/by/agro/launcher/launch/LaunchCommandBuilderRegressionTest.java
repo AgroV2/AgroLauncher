@@ -71,6 +71,43 @@ class LaunchCommandBuilderRegressionTest {
     }
 
     @Test
+    void modernForgeIgnoresInheritedVanillaJarInBootstrapLayer() throws Exception {
+        LauncherPaths paths = LauncherPaths.forRoot(tempDir.resolve("modern-forge"));
+        paths.ensureDirectories();
+        JsonObject base = new JsonObject();
+        base.addProperty("id", "1.20.1");
+        base.addProperty("mainClass", "net.minecraft.client.main.Main");
+        base.add("libraries", new com.google.gson.JsonArray());
+        JsonObject forge = new JsonObject();
+        forge.addProperty("id", "1.20.1-forge-47.4.28");
+        forge.addProperty("inheritsFrom", "1.20.1");
+        forge.addProperty("mainClass", "cpw.mods.bootstraplauncher.BootstrapLauncher");
+        forge.add("libraries", new com.google.gson.JsonArray());
+        JsonObject arguments = new JsonObject();
+        com.google.gson.JsonArray jvm = new com.google.gson.JsonArray();
+        jvm.add("-cp");
+        jvm.add("${classpath}");
+        jvm.add("-DignoreList=bootstraplauncher,forge-,${version_name}.jar");
+        arguments.add("jvm", jvm);
+        forge.add("arguments", arguments);
+        VersionResolver resolver = new VersionResolver(paths, new by.agro.launcher.core.Downloader());
+        resolver.writeVersionJson("1.20.1", base);
+        resolver.writeVersionJson("1.20.1-forge-47.4.28", forge);
+        Path client = paths.versionJar("1.20.1");
+        Files.createDirectories(client.getParent());
+        Files.write(client, new byte[]{1});
+        LaunchOptions options = baseOptions(resolver.resolve("1.20.1-forge-47.4.28", null,
+                by.agro.launcher.core.ProgressListener.NOOP, true), paths);
+        options.loaderType = "forge";
+        List<String> command = new LaunchCommandBuilder(paths).build(options);
+        assertTrue(command.contains("-DignoreList=bootstraplauncher,forge-,1.20.1-forge-47.4.28.jar,1.20.1.jar"));
+        assertTrue(command.get(command.indexOf("-cp") + 1).contains(client.toAbsolutePath().toString()));
+        options.loaderType = "vanilla";
+        command = new LaunchCommandBuilder(paths).build(options);
+        assertTrue(command.contains("-DignoreList=bootstraplauncher,forge-,1.20.1-forge-47.4.28.jar"));
+    }
+
+    @Test
     void microsoftAccountUsesMsaUserTypeWithoutElyInjector() throws Exception {
         LauncherPaths paths = LauncherPaths.forRoot(tempDir.resolve("microsoft"));
         paths.ensureDirectories();

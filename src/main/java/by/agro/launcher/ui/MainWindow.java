@@ -8,6 +8,7 @@ import by.agro.launcher.ui.components.LogoIcon;
 import by.agro.launcher.ui.components.NavIcon;
 import by.agro.launcher.ui.components.SideNavButton;
 import by.agro.launcher.ui.components.UiFactory;
+import by.agro.launcher.ui.components.WindowTitleBar;
 import by.agro.launcher.ui.panels.AccountsPanel;
 import by.agro.launcher.ui.panels.InstancesPanel;
 import by.agro.launcher.ui.panels.AboutPanel;
@@ -66,6 +67,7 @@ public final class MainWindow extends JFrame {
     private JLabel logoIconLabel;
     private JPanel sidebar;
     private JPanel statusBar;
+    private WindowTitleBar titleBar;
     private JLabel offlineWarningLabel;
     private String currentCard;
     private JLabel versionLabel;
@@ -97,6 +99,8 @@ public final class MainWindow extends JFrame {
         setLayout(new BorderLayout());
 
         buildPanels();
+        titleBar = new WindowTitleBar(this);
+        add(titleBar, BorderLayout.NORTH);
         add(buildSidebar(), BorderLayout.WEST);
         add(cards, BorderLayout.CENTER);
         add(buildStatusBar(), BorderLayout.SOUTH);
@@ -127,6 +131,7 @@ public final class MainWindow extends JFrame {
 
         Strings.addLanguageListener(() -> SwingUtilities.invokeLater(() -> {
             setTitle(Strings.get("app.name"));
+            titleBar.updateLabels();
             refreshNavTexts();
             if (offlineWarningLabel != null) {
                 offlineWarningLabel.setText(Strings.get("app.offlineOnly"));
@@ -532,6 +537,7 @@ public final class MainWindow extends JFrame {
 
 
     private void applyThemeColors() {
+        titleBar.refreshTheme();
         sidebar.setBackground(AgroTheme.bgDeep());
         statusBar.setBackground(AgroTheme.bgDeep());
         statusBar.setBorder(BorderFactory.createCompoundBorder(

@@ -21,6 +21,10 @@ public final class Strings {
     static {
 
         put("app.name", "AgroLauncher", "AgroLauncher");
+        put("window.minimize", "Свернуть", "Minimize");
+        put("window.maximize", "Развернуть", "Maximize");
+        put("window.restore", "Восстановить размер", "Restore");
+        put("window.close", "Закрыть окно", "Close window");
         put("app.subtitle", "Быстрый и кастомизируемый лаунчер Minecraft",
                 "Fast and customizable Minecraft launcher");
         put("app.offlineOnly", "Оффлайн, Ely.by и Microsoft", "Offline, Ely.by and Microsoft");
@@ -741,8 +745,8 @@ public final class Strings {
         put("microsoft.httpError", "Ошибка {0}: HTTP {1}.", "{0} failed: HTTP {1}.");
         put("microsoft.xstsFailed", "Ошибка Xbox XSTS: HTTP {0}, код {1}.", "Xbox XSTS failed: HTTP {0}, code {1}.");
         put("microsoft.appNotApproved",
-                "Minecraft Services отклонил приложение (HTTP 403). Скорее всего лаунчер еще не был одобрен Mojang. ",
-                "Minecraft Services rejected the application (HTTP 403). Most likely launcher isn't approved by Mojang yet. ");
+                "Minecraft Services отклонил приложение (HTTP 403). Возможно, требуется одобрение Client ID: https://aka.ms/mce-reviewappid",
+                "Minecraft Services rejected the application (HTTP 403). The client ID may need approval: https://aka.ms/mce-reviewappid");
         put("microsoft.noProfile", "Профиль Minecraft Java не найден. Проверьте доступ к игре и создание профиля.",
                 "Minecraft Java profile not found. Check game access and profile setup.");
 
